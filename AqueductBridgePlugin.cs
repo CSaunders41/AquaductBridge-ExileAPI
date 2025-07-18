@@ -723,7 +723,7 @@ namespace AqueductBridge
                             {
                                 var x = Convert.ToSingle(waypoint["x"]);
                                 var y = Convert.ToSingle(waypoint["y"]);
-                                currentPath.Add(new Vector2(x, y));
+                                currentPath.Add(new System.Numerics.Vector2(x, y));
                             }
                         }
                     }
@@ -732,7 +732,7 @@ namespace AqueductBridge
                     {
                         var x = Convert.ToSingle(target["x"]);
                         var y = Convert.ToSingle(target["y"]);
-                        targetPosition = new Vector2(x, y);
+                        targetPosition = new System.Numerics.Vector2(x, y);
                     }
                     else
                     {
