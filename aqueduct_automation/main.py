@@ -249,6 +249,21 @@ class AqueductAutomation:
                     successful_moves += 1
                     self.debug_overlay.report_movement_result(True, 0, "Reached waypoint")
                     
+                    # If this is the last waypoint, try to interact with it
+                    if i == len(path) - 1:
+                        self.debug_overlay.set_current_task("Interacting with Exit")
+                        self.logger.info("Reached final waypoint - attempting to interact with exit")
+                        
+                        # Try to find and click on the actual waypoint/exit entity
+                        if self._interact_with_nearby_exit():
+                            self.debug_overlay.set_current_task("Exit Used - Waiting for Area Load")
+                            self.logger.info("Successfully interacted with exit")
+                            # Wait for area transition
+                            time.sleep(3.0)
+                            break
+                        else:
+                            self.logger.warning("Could not interact with exit")
+                    
                     # Check for and handle combat
                     if self.combat_system.scan_for_enemies():
                         self.debug_overlay.set_current_task("Engaging Combat")
@@ -295,6 +310,56 @@ class AqueductAutomation:
         for i, entity in enumerate(entities[:3]):  # Only debug first 3
             self.logger.debug(f"Entity {i+1}: {entity.get('Path', 'Unknown')}")
             self.coordinate_helper.debug_coordinates(entity)
+    
+    def _interact_with_nearby_exit(self) -> bool:
+        """Find and interact with nearby waypoint/exit"""
+        try:
+            # Get current entities
+            game_data = self.api_client.get_full_game_data()
+            entities = game_data.get('awake_entities', [])
+            current_pos = self.api_client.get_player_position()
+            
+            # Find waypoint/exit entities within interaction range
+            waypoint_entities = []
+            for entity in entities:
+                path = entity.get('Path', '').lower()
+                if ('waypoint' in path or 'teleport' in path or 'portal' in path):
+                    entity_pos = entity.get('GridPosition', {})
+                    if entity_pos:
+                        from utils import calculate_distance
+                        distance = calculate_distance(current_pos, entity_pos)
+                        if distance < 50:  # Within interaction range
+                            waypoint_entities.append((entity, distance))
+            
+            if not waypoint_entities:
+                self.logger.warning("No waypoint entities found within interaction range")
+                return False
+            
+            # Sort by distance and try to interact with the closest
+            waypoint_entities.sort(key=lambda x: x[1])
+            closest_entity, distance = waypoint_entities[0]
+            
+            self.logger.info(f"Found waypoint entity at distance {distance:.1f}: {closest_entity.get('Path', 'Unknown')}")
+            
+            # Get click position for the entity
+            screen_coords = self.coordinate_fix.get_entity_click_position(closest_entity)
+            if screen_coords:
+                self.logger.info(f"Clicking on waypoint at screen position: {screen_coords}")
+                
+                # Click on the waypoint
+                if self.safe_mode:
+                    self.logger.info(f"SAFE MODE: Would click waypoint at {screen_coords}")
+                    return True
+                else:
+                    self.api_client.click_position(screen_coords[0], screen_coords[1])
+                    return True
+            else:
+                self.logger.warning("Could not get valid screen coordinates for waypoint")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error interacting with exit: {e}")
+            return False
     
     def move_to_position(self, target_pos: Dict[str, int]):
         """Move player to target position"""

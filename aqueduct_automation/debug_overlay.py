@@ -42,7 +42,7 @@ class DebugOverlay:
         """Set the current task being performed"""
         self.current_task = task
         self.add_message(f"TASK: {task}", DebugLevel.INFO)
-        self.logger.info(f"🎯 Current Task: {task}")
+        self.logger.info(f">> Current Task: {task}")
         
     def set_target_info(self, target_type: str, position: Dict[str, int], distance: float):
         """Set information about the current target"""
@@ -52,7 +52,7 @@ class DebugOverlay:
             'distance': distance
         }
         self.add_message(f"TARGET: {target_type} at ({position.get('x', 0)}, {position.get('y', 0)}) - {distance:.1f} units", DebugLevel.INFO)
-        self.logger.info(f"🎯 Target: {target_type} at distance {distance:.1f}")
+        self.logger.info(f">> Target: {target_type} at distance {distance:.1f}")
         
     def set_path_info(self, waypoints: int, current_waypoint: int, waypoint_pos: Dict[str, int]):
         """Set information about the current path"""
@@ -61,33 +61,33 @@ class DebugOverlay:
             'current_waypoint': current_waypoint,
             'current_position': waypoint_pos
         }
-        self.add_message(f"PATH: Waypoint {current_waypoint}/{waypoints} → ({waypoint_pos.get('x', 0)}, {waypoint_pos.get('y', 0)})", DebugLevel.INFO)
-        self.logger.info(f"🗺️  Path: {current_waypoint}/{waypoints} waypoints")
+        self.add_message(f"PATH: Waypoint {current_waypoint}/{waypoints} -> ({waypoint_pos.get('x', 0)}, {waypoint_pos.get('y', 0)})", DebugLevel.INFO)
+        self.logger.info(f">> Path: {current_waypoint}/{waypoints} waypoints")
         
     def report_pathfinding_method(self, method: str, success: bool):
         """Report which pathfinding method was used"""
         level = DebugLevel.SUCCESS if success else DebugLevel.WARNING
         self.add_message(f"PATHFINDING: {method} - {'SUCCESS' if success else 'FAILED'}", level)
-        self.logger.info(f"🧭 Pathfinding: {method} - {'✅' if success else '❌'}")
+        self.logger.info(f">> Pathfinding: {method} - {'OK' if success else 'FAILED'}")
         
     def report_movement_result(self, success: bool, distance: float, reason: str = ""):
         """Report movement attempt result"""
         if success:
             self.add_message(f"MOVEMENT: SUCCESS - Reached target", DebugLevel.SUCCESS)
-            self.logger.info(f"✅ Movement: SUCCESS")
+            self.logger.info(f">> Movement: SUCCESS")
         else:
             self.add_message(f"MOVEMENT: FAILED - {reason} (distance: {distance:.1f})", DebugLevel.ERROR)
-            self.logger.warning(f"❌ Movement: FAILED - {reason} (distance: {distance:.1f})")
+            self.logger.warning(f">> Movement: FAILED - {reason} (distance: {distance:.1f})")
     
     def report_obstacle_detected(self, obstacle_type: str, position: Dict[str, int]):
         """Report obstacle detection"""
         self.add_message(f"OBSTACLE: {obstacle_type} at ({position.get('x', 0)}, {position.get('y', 0)})", DebugLevel.WARNING)
-        self.logger.warning(f"🚧 Obstacle: {obstacle_type}")
+        self.logger.warning(f">> Obstacle: {obstacle_type}")
         
     def report_zone_exit_found(self, exit_type: str, position: Dict[str, int], count: int):
         """Report zone exit detection"""
         self.add_message(f"EXIT FOUND: {count} {exit_type}(s) detected", DebugLevel.SUCCESS)
-        self.logger.info(f"🚪 Found {count} {exit_type}(s)")
+        self.logger.info(f">> Found {count} {exit_type}(s)")
         
     def add_message(self, text: str, level: DebugLevel, duration: float = 5.0):
         """Add a debug message to display"""
@@ -107,17 +107,17 @@ class DebugOverlay:
             display_lines = []
             
             # Current task (always shown)
-            display_lines.append(f"🎯 TASK: {self.current_task}")
+            display_lines.append(f">> TASK: {self.current_task}")
             
             # Target info
             if self.target_info:
                 target = self.target_info
-                display_lines.append(f"🎯 TARGET: {target['type']} at ({target['position'].get('x', 0)}, {target['position'].get('y', 0)}) - {target['distance']:.1f} units")
+                display_lines.append(f">> TARGET: {target['type']} at ({target['position'].get('x', 0)}, {target['position'].get('y', 0)}) - {target['distance']:.1f} units")
             
             # Path info
             if self.path_info:
                 path = self.path_info
-                display_lines.append(f"🗺️  PATH: Waypoint {path['current_waypoint']}/{path['total_waypoints']} → ({path['current_position'].get('x', 0)}, {path['current_position'].get('y', 0)})")
+                display_lines.append(f">> PATH: Waypoint {path['current_waypoint']}/{path['total_waypoints']} -> ({path['current_position'].get('x', 0)}, {path['current_position'].get('y', 0)})")
             
             # Recent messages
             for msg in self.messages[-5:]:  # Show last 5 messages
@@ -127,7 +127,7 @@ class DebugOverlay:
             # Send to log (since we don't have on-screen display yet)
             if time.time() - self.last_update > 2.0:  # Update every 2 seconds
                 self.logger.info("=" * 50)
-                self.logger.info("🖥️  DEBUG OVERLAY")
+                self.logger.info(">> DEBUG OVERLAY")
                 for line in display_lines:
                     self.logger.info(line)
                 self.logger.info("=" * 50)
@@ -139,12 +139,12 @@ class DebugOverlay:
     def _get_level_icon(self, level: DebugLevel) -> str:
         """Get icon for debug level"""
         icons = {
-            DebugLevel.INFO: "ℹ️",
-            DebugLevel.WARNING: "⚠️",
-            DebugLevel.ERROR: "❌",
-            DebugLevel.SUCCESS: "✅"
+            DebugLevel.INFO: "[INFO]",
+            DebugLevel.WARNING: "[WARN]",
+            DebugLevel.ERROR: "[ERROR]",
+            DebugLevel.SUCCESS: "[SUCCESS]"
         }
-        return icons.get(level, "📝")
+        return icons.get(level, "[DEBUG]")
     
     def clear_messages(self):
         """Clear all debug messages"""
