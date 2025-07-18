@@ -16,6 +16,8 @@ using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Enums;
 using SharpDX;
+using ExileCore.PoEMemory;
+using GameOffsets.Native;
 
 namespace AqueductBridge
 {
@@ -352,22 +354,22 @@ namespace AqueductBridge
         {
             try
             {
-                var terrainData = GameController?.IngameState?.Data?.Terrain;
-                if (terrainData?.LayerMelee.First == IntPtr.Zero)
+                var terrain = GameController?.IngameState?.Data?.Terrain;
+                if (terrain?.LayerMelee.First == IntPtr.Zero)
                 {
                     return "";
                 }
 
-                var terrainBytes = GameController.Memory.ReadBytes(terrainData.LayerMelee.First, terrainData.LayerMelee.Size);
-                var width = (int)(terrainData.NumCols - 1) * 23;
-                var height = (int)(terrainData.NumRows - 1) * 23;
+                var terrainBytes = GameController.Memory.ReadBytes(terrain.LayerMelee.First, terrain.LayerMelee.Size);
+                var width = (int)(terrain.NumCols - 1) * 23;
+                var height = (int)(terrain.NumRows - 1) * 23;
 
                 var sb = new StringBuilder();
                 if ((width & 1) > 0) width++;
                 
                 for (int y = 0; y < height; y++)
                 {
-                    var dataIndex = y * terrainData.BytesPerRow;
+                    var dataIndex = y * terrain.BytesPerRow;
                     for (int x = 0; x < width; x += 2)
                     {
                         if (dataIndex + (x >> 1) < terrainBytes.Length)
