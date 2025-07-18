@@ -9,6 +9,13 @@ using System.IO;
 using System.Text;
 using Newtonsoft.Json;
 using System.Threading;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using ExileCore.PoEMemory.Components;
+using ExileCore.PoEMemory.MemoryObjects;
+using ExileCore.Shared.Enums;
+using SharpDX;
 
 namespace AqueductBridge
 {
@@ -51,6 +58,13 @@ namespace AqueductBridge
                 
                 if (_isServerRunning)
                 {
+                    ImGui.Text("Available Endpoints:");
+                    ImGui.BulletText("/gameInfo - Basic game info");
+                    ImGui.BulletText("/gameInfo?type=full - Full automation data");
+                    ImGui.BulletText("/player - Player data");
+                    ImGui.BulletText("/area - Area data");
+                    ImGui.BulletText("/positionOnScreen?y={y}&x={x} - Coordinate conversion");
+                    
                     if (ImGui.Button("Stop Server"))
                     {
                         StopHttpServer();
@@ -158,7 +172,7 @@ namespace AqueductBridge
                     return;
                 }
 
-                var responseData = GetGameData(request.Url.AbsolutePath);
+                var responseData = GetGameData(request.Url);
                 var responseString = JsonConvert.SerializeObject(responseData);
                 var responseBytes = Encoding.UTF8.GetBytes(responseString);
                 
@@ -183,18 +197,28 @@ namespace AqueductBridge
             }
         }
 
-        private object GetGameData(string path)
+        private object GetGameData(Uri url)
         {
             try
             {
+                var path = url.AbsolutePath;
+                var query = HttpUtility.ParseQueryString(url.Query);
+                
                 switch (path)
                 {
                     case "/gameInfo":
+                        var type = query["type"];
+                        if (type == "full")
+                        {
+                            return GetFullGameData();
+                        }
                         return GetGameInfo();
                     case "/player":
                         return GetPlayerData();
                     case "/area":
                         return GetAreaData();
+                    case "/positionOnScreen":
+                        return GetPositionOnScreen(query["x"], query["y"]);
                     default:
                         return new { error = "Unknown endpoint" };
                 }
@@ -217,6 +241,23 @@ namespace AqueductBridge
                 area_name = GameController.Area?.CurrentArea?.Name ?? "Unknown",
                 in_game = GameController.InGame,
                 window_focused = GameController.Window.IsForeground()
+            };
+        }
+
+        private object GetFullGameData()
+        {
+            if (GameController?.Player == null)
+                return new { error = "Game not loaded" };
+
+            return new
+            {
+                WindowArea = GetWindowArea(),
+                terrain_string = GetTerrainString(),
+                player_pos = GetPlayerPosition(),
+                awake_entities = GetAwakeEntities(),
+                life = GetLifeData(),
+                area_loading = GameController.IsLoading,
+                area_id = GameController.Game?.IngameState?.Data?.CurrentAreaHash ?? 0
             };
         }
 
@@ -258,6 +299,289 @@ namespace AqueductBridge
                 area_id = GameController.Game?.IngameState?.Data?.CurrentAreaHash.ToString() ?? "Unknown",
                 is_loading = GameController.IsLoading
             };
+        }
+
+        private object GetPositionOnScreen(string xStr, string yStr)
+        {
+            try
+            {
+                if (!int.TryParse(xStr, out int x) || !int.TryParse(yStr, out int y))
+                {
+                    return new { error = "Invalid coordinates" };
+                }
+
+                var camera = GameController?.IngameState?.Camera;
+                if (camera == null)
+                {
+                    return new { error = "Camera not available" };
+                }
+
+                var worldPos = new Vector3(x, y, 0);
+                var screenPos = camera.WorldToScreen(worldPos);
+                
+                return new int[] { (int)screenPos.X, (int)screenPos.Y };
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error converting position to screen: {ex.Message}");
+                return new { error = ex.Message };
+            }
+        }
+
+        private object GetWindowArea()
+        {
+            try
+            {
+                var windowRect = GameController.Window.GetWindowRectangle();
+                return new
+                {
+                    X = windowRect.X,
+                    Y = windowRect.Y,
+                    Width = windowRect.Width,
+                    Height = windowRect.Height
+                };
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error getting window area: {ex.Message}");
+                return new { X = 0, Y = 0, Width = 1920, Height = 1080 };
+            }
+        }
+
+        private string GetTerrainString()
+        {
+            try
+            {
+                var terrainData = GameController?.IngameState?.Data?.Terrain;
+                if (terrainData?.LayerMelee == null)
+                {
+                    return "";
+                }
+
+                var terrain = terrainData.LayerMelee;
+                var width = terrainData.NumCols;
+                var height = terrainData.NumRows;
+
+                var sb = new StringBuilder();
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        var index = y * width + x;
+                        if (index < terrain.Length)
+                        {
+                            // Convert terrain value to aqueduct_runner format
+                            // ExileApi: 0 = passable, 1 = not passable
+                            // aqueduct_runner: 51 = passable, 49 = not passable
+                            var terrainValue = terrain[index];
+                            var convertedValue = terrainValue == 0 ? 51 : 49;
+                            sb.Append(convertedValue);
+                        }
+                        else
+                        {
+                            sb.Append("49"); // Default to not passable
+                        }
+
+                        if (x < width - 1)
+                        {
+                            sb.Append(" ");
+                        }
+                    }
+                    if (y < height - 1)
+                    {
+                        sb.Append("\r\n");
+                    }
+                }
+
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error getting terrain string: {ex.Message}");
+                return "";
+            }
+        }
+
+        private object GetPlayerPosition()
+        {
+            try
+            {
+                var player = GameController.Player;
+                if (player == null)
+                {
+                    return new { X = 0, Y = 0, Z = 0 };
+                }
+
+                var gridPos = player.GridPos;
+                return new
+                {
+                    X = (int)gridPos.X,
+                    Y = (int)gridPos.Y,
+                    Z = (int)gridPos.Z
+                };
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error getting player position: {ex.Message}");
+                return new { X = 0, Y = 0, Z = 0 };
+            }
+        }
+
+        private object[] GetAwakeEntities()
+        {
+            try
+            {
+                var entities = new List<object>();
+                var entityList = GameController?.EntityListWrapper?.ValidEntitiesByType;
+                
+                if (entityList == null)
+                {
+                    return entities.ToArray();
+                }
+
+                var camera = GameController?.IngameState?.Camera;
+                if (camera == null)
+                {
+                    return entities.ToArray();
+                }
+
+                foreach (var entityGroup in entityList.Values)
+                {
+                    foreach (var entity in entityGroup)
+                    {
+                        try
+                        {
+                            if (entity?.IsValid != true || entity.Address == 0)
+                                continue;
+
+                            var gridPos = entity.GridPos;
+                            var worldPos = new Vector3(gridPos.X, gridPos.Y, gridPos.Z);
+                            var screenPos = camera.WorldToScreen(worldPos);
+
+                            // Get entity type for aqueduct_runner
+                            var entityType = GetEntityTypeForRunner(entity);
+                            if (entityType == 0) continue; // Skip if not relevant
+
+                            var life = entity.GetComponent<Life>();
+                            var lifeData = new
+                            {
+                                Health = new
+                                {
+                                    Current = life?.CurHP ?? 0,
+                                    Total = life?.MaxHP ?? 0,
+                                    ReservedTotal = life?.ReservedHP ?? 0
+                                },
+                                Mana = new
+                                {
+                                    Current = life?.CurMana ?? 0,
+                                    Total = life?.MaxMana ?? 0,
+                                    ReservedTotal = life?.ReservedMana ?? 0
+                                },
+                                EnergyShield = new
+                                {
+                                    Current = life?.CurES ?? 0,
+                                    Total = life?.MaxES ?? 0,
+                                    ReservedTotal = life?.ReservedES ?? 0
+                                }
+                            };
+
+                            entities.Add(new
+                            {
+                                GridPosition = new { X = (int)gridPos.X, Y = (int)gridPos.Y, Z = (int)gridPos.Z },
+                                location_on_screen = new { X = (int)screenPos.X, Y = (int)screenPos.Y },
+                                EntityType = entityType,
+                                Path = entity.Path ?? "",
+                                life = lifeData,
+                                Id = entity.Id,
+                                IsAlive = entity.IsAlive
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            // Skip individual entity errors
+                            continue;
+                        }
+                    }
+                }
+
+                return entities.ToArray();
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error getting awake entities: {ex.Message}");
+                return new object[0];
+            }
+        }
+
+        private int GetEntityTypeForRunner(Entity entity)
+        {
+            try
+            {
+                // Map ExileApi entity types to aqueduct_runner expected values
+                if (entity.Type == EntityType.Monster)
+                {
+                    return 14; // aqueduct_runner expects 14 for monsters
+                }
+
+                // Check for important entities by path
+                var path = entity.Path?.ToLower() ?? "";
+                if (path.Contains("door") || path.Contains("waypoint") || 
+                    path.Contains("transition") || path.Contains("stash"))
+                {
+                    return 1; // Generic interactable
+                }
+
+                return 0; // Skip other entities
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private object GetLifeData()
+        {
+            try
+            {
+                var player = GameController.Player;
+                if (player == null)
+                {
+                    return new { error = "Player not found" };
+                }
+
+                var life = player.GetComponent<Life>();
+                if (life == null)
+                {
+                    return new { error = "Life component not found" };
+                }
+
+                return new
+                {
+                    Health = new
+                    {
+                        Current = life.CurHP,
+                        Total = life.MaxHP,
+                        ReservedTotal = life.ReservedHP
+                    },
+                    Mana = new
+                    {
+                        Current = life.CurMana,
+                        Total = life.MaxMana,
+                        ReservedTotal = life.ReservedMana
+                    },
+                    EnergyShield = new
+                    {
+                        Current = life.CurES,
+                        Total = life.MaxES,
+                        ReservedTotal = life.ReservedES
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error getting life data: {ex.Message}");
+                return new { error = ex.Message };
+            }
         }
 
         public override void OnClose()
