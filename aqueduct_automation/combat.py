@@ -386,13 +386,21 @@ class CombatSystem:
     
     def _click_position(self, x: int, y: int):
         """Click at screen position"""
-        # Placeholder - would be implemented with API call
-        pass
+        try:
+            from input_controller import click_position
+            return click_position(x, y)
+        except ImportError:
+            self.logger.error("Input controller not available")
+            return False
     
     def _send_key(self, key: str):
         """Send key press"""
-        # Placeholder - would be implemented with API call
-        pass
+        try:
+            from input_controller import send_key
+            return send_key(key)
+        except ImportError:
+            self.logger.error("Input controller not available")
+            return False
     
     def get_combat_stats(self) -> Dict[str, Any]:
         """Get combat statistics"""

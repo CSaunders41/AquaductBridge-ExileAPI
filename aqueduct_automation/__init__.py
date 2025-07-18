@@ -20,6 +20,7 @@ from .resource_manager import ResourceManager, ResourceConfig
 
 # Utilities
 from .utils import setup_logging, calculate_distance, Timer
+from .input_controller import InputController
 
 __all__ = [
     # Core classes
@@ -40,5 +41,6 @@ __all__ = [
     # Utilities
     'setup_logging',
     'calculate_distance',
-    'Timer'
+    'Timer',
+    'InputController'
 ] 

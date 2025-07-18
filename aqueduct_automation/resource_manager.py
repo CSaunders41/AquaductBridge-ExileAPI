@@ -404,8 +404,12 @@ class ResourceManager:
     
     def _send_key(self, key: str):
         """Send key press"""
-        # Placeholder - would be implemented with actual input system
-        pass
+        try:
+            from input_controller import send_key
+            return send_key(key)
+        except ImportError:
+            self.logger.error("Input controller not available")
+            return False
 
 # Factory function for creating resource configurations
 def create_resource_config(build_type: str = "default") -> ResourceConfig:

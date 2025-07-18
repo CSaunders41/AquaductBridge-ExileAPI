@@ -291,6 +291,43 @@ class AqueductAutomation:
             self.logger.error(f"Failed to use waypoint: {e}")
             return False
     
+    def use_waypoint_to_hideout(self) -> bool:
+        """Use waypoint to travel to hideout"""
+        try:
+            # Find waypoint entity
+            entities = self.api_client.get_entities()
+            waypoint = next((e for e in entities if 'waypoint' in e.get('Path', '').lower()), None)
+            
+            if not waypoint:
+                self.logger.error("No waypoint found")
+                return False
+                
+            # Click waypoint
+            screen_pos = waypoint['location_on_screen']
+            self.api_client.click_position(screen_pos['X'], screen_pos['Y'])
+            
+            # Wait for waypoint UI and select hideout
+            time.sleep(2)
+            # TODO: Implement waypoint UI interaction for hideout
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to use waypoint to hideout: {e}")
+            return False
+    
+    def navigate_to_waypoint(self) -> bool:
+        """Navigate to waypoint in town"""
+        try:
+            # For now, assume waypoint is accessible
+            # In a real implementation, this would navigate through town
+            self.logger.info("Navigating to waypoint in town")
+            return self.use_waypoint_to_aqueduct()
+            
+        except Exception as e:
+            self.logger.error(f"Failed to navigate to waypoint: {e}")
+            return False
+    
     def use_portal_scroll(self) -> bool:
         """Use portal scroll to return to hideout"""
         try:

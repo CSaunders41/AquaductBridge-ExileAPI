@@ -180,24 +180,22 @@ class AqueductAPIClient:
             return []
     
     def click_position(self, x: int, y: int):
-        """Click at screen position (placeholder - needs actual implementation)"""
-        # This is a placeholder - actual implementation would need:
-        # 1. A way to send click commands to the game
-        # 2. Either through additional API endpoints or external libraries
-        self.logger.debug(f"Click at position ({x}, {y})")
-        
-        # For now, this is just a placeholder
-        # In a real implementation, you might use:
-        # - PyAutoGUI
-        # - Windows API calls
-        # - Additional endpoints in the AqueductBridge plugin
-        pass
+        """Click at screen position"""
+        try:
+            from input_controller import click_position
+            return click_position(x, y)
+        except ImportError:
+            self.logger.error("Input controller not available")
+            return False
     
     def send_key(self, key: str):
-        """Send key press to game (placeholder)"""
-        self.logger.debug(f"Send key: {key}")
-        # Placeholder for key sending functionality
-        pass
+        """Send key press to game"""
+        try:
+            from input_controller import send_key
+            return send_key(key)
+        except ImportError:
+            self.logger.error("Input controller not available")
+            return False
     
     def wait_for_area_load(self, timeout: float = 30.0) -> bool:
         """Wait for area to finish loading"""

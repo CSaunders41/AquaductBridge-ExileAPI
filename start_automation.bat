@@ -16,10 +16,15 @@ if errorlevel 1 (
 )
 
 REM Check if requirements are installed
-python -c "import requests" >nul 2>&1
+python -c "import requests, pyautogui" >nul 2>&1
 if errorlevel 1 (
     echo Installing requirements...
     pip install -r requirements.txt
+    if errorlevel 1 (
+        echo ❌ Failed to install requirements
+        pause
+        exit /b 1
+    )
 )
 
 REM Start the automation
