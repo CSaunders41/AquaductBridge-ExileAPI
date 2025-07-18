@@ -5,11 +5,8 @@
     <OutputType>Library</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
-    <!-- Try different possible locations for ExileApi assemblies -->
-    <ExileApiPath Condition="'$(ExileApiPath)' == '' AND Exists('..\..\..\ExileCore.dll')">..\..\..\</ExileApiPath>
-    <ExileApiPath Condition="'$(ExileApiPath)' == '' AND Exists('..\..\ExileCore.dll')">..\..\</ExileApiPath>
-    <ExileApiPath Condition="'$(ExileApiPath)' == '' AND Exists('..\..\..\..\ExileCore.dll')">..\..\..\..\</ExileApiPath>
-    <ExileApiPath Condition="'$(ExileApiPath)' == ''">..\..\..\..\</ExileApiPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,27 +16,22 @@
 
   <ItemGroup>
     <Reference Include="ExileCore">
-      <HintPath>$(ExileApiPath)ExileCore.dll</HintPath>
+      <HintPath>..\..\..\ExileCore.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="GameOffsets">
-      <HintPath>$(ExileApiPath)GameOffsets.dll</HintPath>
+      <HintPath>..\..\..\GameOffsets.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="ImGui.NET">
-      <HintPath>$(ExileApiPath)ImGui.NET.dll</HintPath>
+      <HintPath>..\..\..\ImGui.NET.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="ProcessMemoryUtilities">
-      <HintPath>$(ExileApiPath)ProcessMemoryUtilities.dll</HintPath>
+      <HintPath>..\..\..\ProcessMemoryUtilities.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <OutputPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-  </PropertyGroup>
 
 </Project> 
