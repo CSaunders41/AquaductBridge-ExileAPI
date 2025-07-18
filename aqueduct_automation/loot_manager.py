@@ -296,9 +296,22 @@ class LootManager:
                 self._move_to_item(item)
                 time.sleep(0.2)  # Wait for movement
             
-            # Click on item to pick it up
-            screen_pos = item.screen_position
-            self._click_position(screen_pos['X'], screen_pos['Y'])
+            # Use coordinate fix to get safe click position
+            from coordinate_fix import get_coordinate_fix
+            coord_fix = get_coordinate_fix()
+            
+            # Convert item to entity dict for coordinate fix
+            entity_dict = {
+                'GridPosition': item.position,
+                'location_on_screen': item.screen_position
+            }
+            
+            screen_coords = coord_fix.get_entity_click_position(entity_dict)
+            if screen_coords:
+                self._click_position(screen_coords[0], screen_coords[1])
+            else:
+                self.logger.warning("Could not get valid screen coordinates for item")
+                return False
             
             # Wait for pickup
             time.sleep(0.1)
@@ -423,8 +436,15 @@ class LootManager:
     def _interact_with_stash(self, stash: Dict[str, Any]):
         """Interact with stash entity"""
         try:
-            screen_pos = stash['location_on_screen']
-            self._click_position(screen_pos['X'], screen_pos['Y'])
+            # Use coordinate fix to get safe click position
+            from coordinate_fix import get_coordinate_fix
+            coord_fix = get_coordinate_fix()
+            
+            screen_coords = coord_fix.get_entity_click_position(stash)
+            if screen_coords:
+                self._click_position(screen_coords[0], screen_coords[1])
+            else:
+                self.logger.warning("Could not get valid screen coordinates for stash")
             
         except Exception as e:
             self.logger.error(f"Error interacting with stash: {e}")

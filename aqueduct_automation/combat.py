@@ -319,9 +319,22 @@ class CombatSystem:
     def _use_primary_skill(self, target: Monster):
         """Use primary combat skill on target"""
         try:
-            # Click on target position
-            screen_pos = target.screen_position
-            self._click_position(screen_pos['X'], screen_pos['Y'])
+            # Use coordinate fix to get safe click position
+            from coordinate_fix import get_coordinate_fix
+            coord_fix = get_coordinate_fix()
+            
+            # Convert monster to entity dict for coordinate fix
+            entity_dict = {
+                'GridPosition': target.position,
+                'location_on_screen': target.screen_position
+            }
+            
+            screen_coords = coord_fix.get_entity_click_position(entity_dict)
+            if screen_coords:
+                self._click_position(screen_coords[0], screen_coords[1])
+            else:
+                self.logger.warning("Could not get valid screen coordinates for target")
+                return
             
             # Use primary skill
             self._send_key(self.config.primary_skill_key)

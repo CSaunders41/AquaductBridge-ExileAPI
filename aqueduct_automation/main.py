@@ -58,6 +58,10 @@ class AqueductAutomation:
         from coordinate_helper import get_coordinate_helper
         self.coordinate_helper = get_coordinate_helper()
         
+        # Initialize coordinate fix (bypasses broken API)
+        from coordinate_fix import get_coordinate_fix
+        self.coordinate_fix = get_coordinate_fix()
+        
         # Stats tracking
         self.stats = FarmingStats()
         self.current_state = "initializing"
@@ -147,6 +151,7 @@ class AqueductAutomation:
                 full_data = self.api_client.get_full_game_data()
                 if full_data and 'WindowArea' in full_data:
                     self.coordinate_helper.set_game_window(full_data['WindowArea'])
+                    self.coordinate_fix.set_game_window(full_data['WindowArea'])
             except Exception as e:
                 self.logger.warning(f"Could not get window info: {e}")
                 
@@ -245,15 +250,16 @@ class AqueductAutomation:
             # Get current position
             current_pos = self.api_client.get_player_position()
             
-            # Calculate screen coordinates for target
-            screen_coords = self.api_client.get_screen_position(
+            # Use coordinate fix instead of broken API
+            screen_coords = self.coordinate_fix.get_movement_position(
                 target_pos['x'], target_pos['y']
             )
             
-            # Validate coordinates before clicking
-            if not self.coordinate_helper.validate_screen_coordinates(screen_coords[0], screen_coords[1]):
-                self.logger.warning(f"Invalid screen coordinates {screen_coords} for target {target_pos}")
-                return
+            if not screen_coords:
+                self.logger.warning(f"Could not get valid screen coordinates for target {target_pos}")
+                # Try safe click near player as fallback
+                screen_coords = self.coordinate_fix.get_safe_click_near_player(current_pos)
+                self.logger.info(f"Using safe click position: {screen_coords}")
             
             # Debug coordinate information
             self.logger.debug(f"Moving to world pos {target_pos} -> screen pos {screen_coords}")
@@ -327,9 +333,14 @@ class AqueductAutomation:
                 self.logger.error("No waypoint found")
                 return False
                 
+            # Use coordinate fix to get safe click position
+            screen_coords = self.coordinate_fix.get_entity_click_position(waypoint)
+            if not screen_coords:
+                self.logger.warning("Could not get valid screen coordinates for waypoint")
+                return False
+                
             # Click waypoint
-            screen_pos = waypoint['location_on_screen']
-            self.api_client.click_position(screen_pos['X'], screen_pos['Y'])
+            self.api_client.click_position(screen_coords[0], screen_coords[1])
             
             # Wait for waypoint UI and select Aqueduct
             time.sleep(2)
@@ -352,9 +363,14 @@ class AqueductAutomation:
                 self.logger.error("No waypoint found")
                 return False
                 
+            # Use coordinate fix to get safe click position
+            screen_coords = self.coordinate_fix.get_entity_click_position(waypoint)
+            if not screen_coords:
+                self.logger.warning("Could not get valid screen coordinates for waypoint")
+                return False
+                
             # Click waypoint
-            screen_pos = waypoint['location_on_screen']
-            self.api_client.click_position(screen_pos['X'], screen_pos['Y'])
+            self.api_client.click_position(screen_coords[0], screen_coords[1])
             
             # Wait for waypoint UI and select hideout
             time.sleep(2)
