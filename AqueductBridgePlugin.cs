@@ -629,7 +629,9 @@ namespace AqueductBridge
                         if (currentPath.Count > 0)
                         {
                             var firstWaypoint = currentPath[0];
-                            var firstScreenPos = camera.WorldToScreen(new SharpDX.Vector3(firstWaypoint.x, firstWaypoint.y, 0f));
+                            // TODO: Fix Vector3 constructor - temporarily disabled
+                            // var firstScreenPos = camera.WorldToScreen(new SharpDX.Vector3(firstWaypoint.x, firstWaypoint.y, 0f));
+                            var firstScreenPos = playerScreenPos; // Temporary placeholder
                             
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
@@ -648,8 +650,11 @@ namespace AqueductBridge
                             var fromPos = currentPath[i];
                             var toPos = currentPath[i + 1];
                             
-                            var fromScreenPos = camera.WorldToScreen(new SharpDX.Vector3(fromPos.x, fromPos.y, 0f));
-                            var toScreenPos = camera.WorldToScreen(new SharpDX.Vector3(toPos.x, toPos.y, 0f));
+                            // TODO: Fix Vector3 constructor - temporarily disabled
+                            // var fromScreenPos = camera.WorldToScreen(new SharpDX.Vector3(fromPos.x, fromPos.y, 0f));
+                            // var toScreenPos = camera.WorldToScreen(new SharpDX.Vector3(toPos.x, toPos.y, 0f));
+                            var fromScreenPos = playerScreenPos; // Temporary placeholder
+                            var toScreenPos = playerScreenPos; // Temporary placeholder
                             
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
@@ -667,7 +672,9 @@ namespace AqueductBridge
                     if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
                     {
                         var camera = GameController.IngameState.Camera;
-                        var targetScreenPos = camera.WorldToScreen(new SharpDX.Vector3(targetPosition.Value.x, targetPosition.Value.y, 0f));
+                        // TODO: Fix Vector3 constructor - temporarily disabled
+                        // var targetScreenPos = camera.WorldToScreen(new SharpDX.Vector3(targetPosition.Value.x, targetPosition.Value.y, 0f));
+                        var targetScreenPos = camera.WorldToScreen(GameController.Player.GridPos); // Temporary placeholder
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
