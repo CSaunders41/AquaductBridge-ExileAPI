@@ -152,9 +152,13 @@ namespace RadarMovement
             var playerPos = GameController.Player.GridPos;
             var targetPos = currentTarget.GridPos;
 
+            // Convert Vector2 grid positions to Vector3 for WorldToScreen
+            var playerPos3D = new Vector3(playerPos.X, playerPos.Y, 0);
+            var targetPos3D = new Vector3(targetPos.X, targetPos.Y, 0);
+
             // Convert world positions to screen positions
-            var playerScreen = camera.WorldToScreen(playerPos);
-            var targetScreen = camera.WorldToScreen(targetPos);
+            var playerScreen = camera.WorldToScreen(playerPos3D);
+            var targetScreen = camera.WorldToScreen(targetPos3D);
 
             // Draw the line (like Radar does)
             if (IsValidScreenPosition(playerScreen) && IsValidScreenPosition(targetScreen))
@@ -199,7 +203,8 @@ namespace RadarMovement
 
             // Convert target position to screen coordinates
             var camera = GameController.IngameState.Camera;
-            var targetScreen = camera.WorldToScreen(targetPos);
+            var targetPos3D = new Vector3(targetPos.X, targetPos.Y, 0);
+            var targetScreen = camera.WorldToScreen(targetPos3D);
 
             if (IsValidScreenPosition(targetScreen))
             {
