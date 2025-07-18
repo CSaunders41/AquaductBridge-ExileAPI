@@ -209,7 +209,7 @@ namespace RadarMovement
             if (IsValidScreenPosition(targetScreen))
             {
                 // Click to move (simple approach like Radar)
-                Input.Click(MouseButtons.Left, targetScreen);
+                Mouse.SetCursorPosAndLeftClick(targetScreen, 25);
                 DebugWindow.LogMsg($"Moving to target at distance {distance:F1}");
             }
         }
