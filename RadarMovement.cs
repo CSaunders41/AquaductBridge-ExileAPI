@@ -171,7 +171,7 @@ namespace RadarMovement
                 );
                 
                 // Draw a small circle at the target
-                Graphics.DrawEllipse(targetScreen, 10, Settings.PathLineColor.Value, 2);
+                Graphics.DrawEllipse(targetScreen, new Vector2(10, 10), Settings.PathLineColor.Value, 2);
             }
         }
 
@@ -209,7 +209,7 @@ namespace RadarMovement
             if (IsValidScreenPosition(targetScreen))
             {
                 // Click to move (simple approach like Radar)
-                Input.Click(targetScreen);
+                Input.Click(MouseButtons.Left, targetScreen);
                 DebugWindow.LogMsg($"Moving to target at distance {distance:F1}");
             }
         }
