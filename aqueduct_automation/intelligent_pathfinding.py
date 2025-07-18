@@ -207,11 +207,27 @@ class IntelligentPathfinder:
             debug_overlay = get_debug_overlay()
             
             if not exits:
-                self.logger.warning("No zone exits found, falling back to exploration pattern")
-                if debug_overlay:
-                    debug_overlay.report_zone_exit_found("exit", {}, 0)
-                    debug_overlay.report_pathfinding_method("Exploration Pattern", False)
-                return self._create_exploration_path(start_pos)
+                self.logger.warning("No zone exits found, trying extended search range")
+                # Try searching with a larger range by getting all exits without distance filtering
+                all_exits = []
+                for entity in entities:
+                    path = entity.get('Path', '').lower()
+                    if any(keyword in path for keyword in ['waypoint', 'teleport', 'portal', 'transition']):
+                        grid_pos = entity.get('GridPosition', {})
+                        if grid_pos:
+                            exit_pos = Position(grid_pos.get('X', 0), grid_pos.get('Y', 0))
+                            all_exits.append(exit_pos)
+                            self.logger.info(f"Found distant exit at {exit_pos}")
+                
+                if all_exits:
+                    self.logger.info(f"Found {len(all_exits)} exits with extended search")
+                    exits = all_exits
+                else:
+                    self.logger.warning("No zone exits found even with extended search, falling back to exploration pattern")
+                    if debug_overlay:
+                        debug_overlay.report_zone_exit_found("exit", {}, 0)
+                        debug_overlay.report_pathfinding_method("Exploration Pattern", False)
+                    return self._create_exploration_path(start_pos)
             
             # Find optimal exit
             target_exit = self.zone_analyzer.find_optimal_exit(start, exits)

@@ -206,6 +206,9 @@ class AqueductAutomation:
             # Get initial position and terrain
             game_data = self.api_client.get_full_game_data()
             
+            # Debug current situation
+            self._debug_current_situation(game_data)
+            
             # Debug coordinate information if in debug mode
             if self.debug_mode:
                 self._debug_entity_coordinates(game_data)
@@ -232,6 +235,10 @@ class AqueductAutomation:
             if len(path) > 0:
                 target = path[-1] if path else None  # Last waypoint is the target
                 self.api_client.send_path_data(path, target)
+            
+            # Check if player is stuck before starting
+            if len(path) > 0:
+                self._try_unstuck_player()
             
             # Follow the path, fighting and looting
             successful_moves = 0
@@ -302,6 +309,66 @@ class AqueductAutomation:
             self.logger.error(f"Error during farming: {e}")
             raise
     
+    def _debug_current_situation(self, game_data: Dict[str, Any]):
+        """Debug current situation to understand why no exits found"""
+        try:
+            player_pos = game_data.get('player_pos', {})
+            entities = game_data.get('awake_entities', [])
+            area_name = game_data.get('area_name', 'Unknown')
+            
+            self.logger.info(f"=== SITUATION DEBUG ===")
+            self.logger.info(f"Player position: {player_pos}")
+            self.logger.info(f"Area name: {area_name}")
+            self.logger.info(f"Total entities: {len(entities)}")
+            
+            # Check for waypoint-related entities
+            waypoint_entities = []
+            for entity in entities:
+                path = entity.get('Path', '').lower()
+                if any(keyword in path for keyword in ['waypoint', 'teleport', 'portal', 'transition']):
+                    entity_pos = entity.get('GridPosition', {})
+                    if entity_pos:
+                        from utils import calculate_distance
+                        distance = calculate_distance(player_pos, entity_pos)
+                        waypoint_entities.append({
+                            'path': entity.get('Path', 'Unknown'),
+                            'position': entity_pos,
+                            'distance': distance
+                        })
+            
+            self.logger.info(f"Waypoint-related entities found: {len(waypoint_entities)}")
+            for i, wp in enumerate(waypoint_entities[:5]):  # Show first 5
+                self.logger.info(f"  {i+1}. {wp['path']} at {wp['position']} (distance: {wp['distance']:.1f})")
+            
+            # Check if player might be stuck
+            if len(waypoint_entities) == 0:
+                self.logger.warning("No waypoint entities found - player might be:")
+                self.logger.warning("  1. In wrong area")
+                self.logger.warning("  2. Too far from waypoints")
+                self.logger.warning("  3. Waypoints not loaded yet")
+                
+                # Try to find ANY entities nearby
+                nearby_entities = []
+                for entity in entities:
+                    entity_pos = entity.get('GridPosition', {})
+                    if entity_pos:
+                        from utils import calculate_distance
+                        distance = calculate_distance(player_pos, entity_pos)
+                        if distance < 100:  # Within 100 units
+                            nearby_entities.append({
+                                'path': entity.get('Path', 'Unknown'),
+                                'distance': distance
+                            })
+                
+                self.logger.info(f"Nearby entities (within 100 units): {len(nearby_entities)}")
+                for i, ent in enumerate(nearby_entities[:3]):
+                    self.logger.info(f"  {i+1}. {ent['path']} (distance: {ent['distance']:.1f})")
+                    
+            self.logger.info(f"=== END DEBUG ===")
+            
+        except Exception as e:
+            self.logger.error(f"Error in situation debug: {e}")
+    
     def _debug_entity_coordinates(self, game_data: Dict[str, Any]):
         """Debug entity coordinate information"""
         entities = game_data.get('awake_entities', [])
@@ -359,6 +426,60 @@ class AqueductAutomation:
                 
         except Exception as e:
             self.logger.error(f"Error interacting with exit: {e}")
+            return False
+    
+    def _try_unstuck_player(self):
+        """Try to unstuck the player by making small movements"""
+        try:
+            self.logger.info("Attempting to unstuck player...")
+            self.debug_overlay.set_current_task("Unstucking Player")
+            
+            current_pos = self.api_client.get_player_position()
+            self.logger.info(f"Current position: {current_pos}")
+            
+            # Try clicking in different directions around the player
+            test_positions = [
+                (-30, -30), (0, -30), (30, -30),
+                (-30, 0),              (30, 0),
+                (-30, 30),  (0, 30),   (30, 30)
+            ]
+            
+            for i, (dx, dy) in enumerate(test_positions):
+                self.logger.info(f"Trying unstuck direction {i+1}/8: ({dx}, {dy})")
+                
+                # Create test position
+                test_pos = {
+                    'x': current_pos.get('X', 0) + dx,
+                    'y': current_pos.get('Y', 0) + dy
+                }
+                
+                # Get screen coordinates
+                screen_coords = self.coordinate_fix.get_movement_position(test_pos['x'], test_pos['y'])
+                if screen_coords:
+                    self.logger.info(f"Clicking at {screen_coords} for unstuck")
+                    
+                    if not self.safe_mode:
+                        self.api_client.click_position(screen_coords[0], screen_coords[1])
+                        time.sleep(0.5)  # Wait for movement
+                        
+                        # Check if player moved
+                        new_pos = self.api_client.get_player_position()
+                        from utils import calculate_distance
+                        distance_moved = calculate_distance(current_pos, new_pos)
+                        
+                        if distance_moved > 5:  # Player moved at least 5 units
+                            self.logger.info(f"Unstuck successful! Player moved {distance_moved:.1f} units")
+                            return True
+                    else:
+                        self.logger.info(f"SAFE MODE: Would click at {screen_coords}")
+                        
+                time.sleep(0.2)  # Small delay between attempts
+            
+            self.logger.warning("Could not unstuck player after trying all directions")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Error trying to unstuck player: {e}")
             return False
     
     def move_to_position(self, target_pos: Dict[str, int]):
