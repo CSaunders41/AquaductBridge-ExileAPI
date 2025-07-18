@@ -29,8 +29,8 @@ namespace AqueductBridge
         private string lastError = "";
         
         // Visual path data
-        private List<SharpDX.Vector2> currentPath = new List<SharpDX.Vector2>();
-        private SharpDX.Vector2? targetPosition = null;
+        private List<System.Numerics.Vector2> currentPath = new List<System.Numerics.Vector2>();
+        private System.Numerics.Vector2? targetPosition = null;
         private DateTime lastPathUpdate = DateTime.MinValue;
         private readonly object pathLock = new object();
 
@@ -629,9 +629,7 @@ namespace AqueductBridge
                         if (currentPath.Count > 0)
                         {
                             var firstWaypoint = currentPath[0];
-                            float x = firstWaypoint.X;
-                            float y = firstWaypoint.Y;
-                            var firstScreenPos = camera.WorldToScreen(new SharpDX.Vector3(x, y, 0f));
+                            var firstScreenPos = camera.WorldToScreen(new SharpDX.Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
                             
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
@@ -650,12 +648,8 @@ namespace AqueductBridge
                             var fromPos = currentPath[i];
                             var toPos = currentPath[i + 1];
                             
-                            float fromX = fromPos.X;
-                            float fromY = fromPos.Y;
-                            float toX = toPos.X;
-                            float toY = toPos.Y;
-                            var fromScreenPos = camera.WorldToScreen(new SharpDX.Vector3(fromX, fromY, 0f));
-                            var toScreenPos = camera.WorldToScreen(new SharpDX.Vector3(toX, toY, 0f));
+                            var fromScreenPos = camera.WorldToScreen(new SharpDX.Vector3(fromPos.X, fromPos.Y, 0f));
+                            var toScreenPos = camera.WorldToScreen(new SharpDX.Vector3(toPos.X, toPos.Y, 0f));
                             
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
@@ -673,9 +667,7 @@ namespace AqueductBridge
                     if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
                     {
                         var camera = GameController.IngameState.Camera;
-                        float targetX = targetPosition.Value.X;
-                        float targetY = targetPosition.Value.Y;
-                        var targetScreenPos = camera.WorldToScreen(new SharpDX.Vector3(targetX, targetY, 0f));
+                        var targetScreenPos = camera.WorldToScreen(new SharpDX.Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
