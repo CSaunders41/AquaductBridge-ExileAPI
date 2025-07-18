@@ -13,12 +13,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ExileCore" Version="1.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <Reference Include="ExileCore">
+      <HintPath>..\..\..\..\ExileCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="SharpDX">
-      <HintPath>$(MSBuildProjectDirectory)\..\..\..\..\..\..\ExileApi\ExileCore.dll</HintPath>
+      <HintPath>..\..\..\..\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Mathematics">
+      <HintPath>..\..\..\..\SharpDX.Mathematics.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
