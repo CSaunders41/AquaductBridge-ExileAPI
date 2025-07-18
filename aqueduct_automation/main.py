@@ -329,7 +329,7 @@ class AqueductAutomation:
             
             self.logger.debug(f"Current pos: {current_pos}, Distance to target: {distance_to_target:.2f}, Distance from start: {distance_from_start:.2f}")
             
-            if distance_to_target < 20:  # More reasonable tolerance for Aqueduct
+            if distance_to_target < 35:  # More forgiving tolerance for Aqueduct
                 self.logger.debug("Reached target position")
                 break
                 
@@ -350,7 +350,7 @@ class AqueductAutomation:
         final_distance = calculate_distance(final_pos, target_pos)
         elapsed = time.time() - start_time
         
-        if final_distance < 20:
+        if final_distance < 35:
             self.logger.info(f"Successfully reached target in {elapsed:.2f}s")
             return True
         else:
