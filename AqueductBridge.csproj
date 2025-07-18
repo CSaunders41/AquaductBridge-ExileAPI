@@ -5,6 +5,7 @@
     <OutputType>Library</OutputType>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
+    <ExileApiPath Condition="'$(ExileApiPath)' == ''">..\..\..\</ExileApiPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,16 +15,16 @@
 
   <ItemGroup>
     <Reference Include="ExileCore">
-      <HintPath>..\..\ExileCore.dll</HintPath>
+      <HintPath>$(ExileApiPath)ExileCore.dll</HintPath>
     </Reference>
     <Reference Include="GameOffsets">
-      <HintPath>..\..\GameOffsets.dll</HintPath>
+      <HintPath>$(ExileApiPath)GameOffsets.dll</HintPath>
     </Reference>
     <Reference Include="ImGui.NET">
-      <HintPath>..\..\ImGui.NET.dll</HintPath>
+      <HintPath>$(ExileApiPath)ImGui.NET.dll</HintPath>
     </Reference>
     <Reference Include="ProcessMemoryUtilities">
-      <HintPath>..\..\ProcessMemoryUtilities.dll</HintPath>
+      <HintPath>$(ExileApiPath)ProcessMemoryUtilities.dll</HintPath>
     </Reference>
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
