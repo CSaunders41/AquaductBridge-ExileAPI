@@ -21,9 +21,9 @@ def main():
     print("=" * 50)
     
     # Import and run with debug flags
-    from main import AqueductAutomation
-    from config import AutomationConfig
-    from utils import setup_logging
+    from aqueduct_automation.main import AqueductAutomation
+    from aqueduct_automation.config import AutomationConfig
+    from aqueduct_automation.utils import setup_logging
     
     # Set up debug logging
     setup_logging(log_level="DEBUG")

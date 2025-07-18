@@ -3,16 +3,11 @@
 Simple start script for Aqueduct Automation
 """
 
-import sys
 import os
 from pathlib import Path
 
-# Add the aqueduct_automation directory to the Python path
-automation_dir = Path(__file__).parent / "aqueduct_automation"
-sys.path.insert(0, str(automation_dir))
-
 # Import and run the automation
-from main import main
+from aqueduct_automation.main import main
 
 if __name__ == "__main__":
     print("🎯 Starting Aqueduct Automation System...")
