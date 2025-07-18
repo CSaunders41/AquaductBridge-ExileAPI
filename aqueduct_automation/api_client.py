@@ -119,11 +119,30 @@ class AqueductAPIClient:
             response.raise_for_status()
             coords = response.json()
             if isinstance(coords, list) and len(coords) >= 2:
-                return (int(coords[0]), int(coords[1]))
+                screen_x, screen_y = int(coords[0]), int(coords[1])
+                
+                # Validate screen coordinates
+                if self._validate_screen_coordinates(screen_x, screen_y):
+                    return (screen_x, screen_y)
+                else:
+                    self.logger.warning(f"Invalid screen coordinates from API: ({screen_x}, {screen_y}) for world ({x}, {y})")
+                    return (0, 0)
             return (0, 0)
         except Exception as e:
             self.logger.error(f"Failed to get screen position: {e}")
             return (0, 0)
+    
+    def _validate_screen_coordinates(self, x: int, y: int) -> bool:
+        """Validate screen coordinates are reasonable"""
+        # Check for obviously invalid coordinates
+        if x < -100 or x > 5000 or y < -100 or y > 5000:
+            return False
+        
+        # Check for coordinates that would trigger PyAutoGUI fail-safe
+        if x < 5 and y < 5:
+            return False
+        
+        return True
     
     def get_window_area(self) -> Dict[str, int]:
         """Get game window area"""
@@ -183,6 +202,12 @@ class AqueductAPIClient:
         """Click at screen position"""
         try:
             from input_controller import click_position
+            
+            # Validate coordinates first
+            if not self._validate_screen_coordinates(x, y):
+                self.logger.warning(f"Refusing to click at invalid coordinates ({x}, {y})")
+                return False
+            
             return click_position(x, y)
         except ImportError:
             self.logger.error("Input controller not available")

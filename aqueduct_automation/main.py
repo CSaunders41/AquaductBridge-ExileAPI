@@ -41,9 +41,11 @@ class FarmingStats:
 class AqueductAutomation:
     """Main automation controller for Aqueduct farming"""
     
-    def __init__(self, config: AutomationConfig):
+    def __init__(self, config: AutomationConfig, debug_mode: bool = False, safe_mode: bool = False):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.debug_mode = debug_mode
+        self.safe_mode = safe_mode
         
         # Initialize components
         self.api_client = AqueductAPIClient(config.api_host, config.api_port)
@@ -52,10 +54,26 @@ class AqueductAutomation:
         self.loot_manager = LootManager(config.loot_config)
         self.resource_manager = ResourceManager(config.resource_config)
         
+        # Initialize coordinate helper
+        from coordinate_helper import get_coordinate_helper
+        self.coordinate_helper = get_coordinate_helper()
+        
         # Stats tracking
         self.stats = FarmingStats()
         self.current_state = "initializing"
         self.running = False
+        
+        # Debug/safe mode settings
+        if debug_mode:
+            self.logger.setLevel(logging.DEBUG)
+            self.logger.info("Debug mode enabled")
+        
+        if safe_mode:
+            self.logger.info("Safe mode enabled - no actual clicks will be performed")
+            
+        # Coordinate validation stats
+        self.invalid_coordinates_count = 0
+        self.coordinate_warnings = []
         
     def start_automation(self):
         """Start the main automation loop"""
@@ -123,6 +141,14 @@ class AqueductAutomation:
             if not game_info.get('window_focused', False):
                 self.logger.warning("Game window not focused")
                 # Could auto-focus here if needed
+            
+            # Set up coordinate helper with window info
+            try:
+                full_data = self.api_client.get_full_game_data()
+                if full_data and 'WindowArea' in full_data:
+                    self.coordinate_helper.set_game_window(full_data['WindowArea'])
+            except Exception as e:
+                self.logger.warning(f"Could not get window info: {e}")
                 
             return True
             
@@ -163,6 +189,10 @@ class AqueductAutomation:
             # Get initial position and terrain
             game_data = self.api_client.get_full_game_data()
             
+            # Debug coordinate information if in debug mode
+            if self.debug_mode:
+                self._debug_entity_coordinates(game_data)
+            
             # Create navigation path through Aqueduct
             path = self.pathfinder.create_aqueduct_path(
                 game_data['player_pos'],
@@ -200,6 +230,15 @@ class AqueductAutomation:
             self.logger.error(f"Error during farming: {e}")
             raise
     
+    def _debug_entity_coordinates(self, game_data: Dict[str, Any]):
+        """Debug entity coordinate information"""
+        entities = game_data.get('awake_entities', [])
+        self.logger.debug(f"Debugging {len(entities)} entities")
+        
+        for i, entity in enumerate(entities[:3]):  # Only debug first 3
+            self.logger.debug(f"Entity {i+1}: {entity.get('Path', 'Unknown')}")
+            self.coordinate_helper.debug_coordinates(entity)
+    
     def move_to_position(self, target_pos: Dict[str, int]):
         """Move player to target position"""
         try:
@@ -211,8 +250,19 @@ class AqueductAutomation:
                 target_pos['x'], target_pos['y']
             )
             
+            # Validate coordinates before clicking
+            if not self.coordinate_helper.validate_screen_coordinates(screen_coords[0], screen_coords[1]):
+                self.logger.warning(f"Invalid screen coordinates {screen_coords} for target {target_pos}")
+                return
+            
+            # Debug coordinate information
+            self.logger.debug(f"Moving to world pos {target_pos} -> screen pos {screen_coords}")
+            
             # Click to move
-            self.api_client.click_position(screen_coords[0], screen_coords[1])
+            success = self.api_client.click_position(screen_coords[0], screen_coords[1])
+            if not success:
+                self.logger.warning(f"Failed to click at {screen_coords}")
+                return
             
             # Wait for movement
             self.wait_for_movement(current_pos, target_pos)
@@ -388,11 +438,36 @@ class AqueductAutomation:
 
 def main():
     """Main entry point"""
-    setup_logging()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Aqueduct Automation System')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--safe-mode', action='store_true', help='Enable safe mode (no actual clicks)')
+    parser.add_argument('--log-level', default='INFO', help='Set log level (DEBUG, INFO, WARNING, ERROR)')
+    parser.add_argument('--max-runs', type=int, default=0, help='Maximum number of runs (0 = unlimited)')
+    parser.add_argument('--disable-failsafe', action='store_true', help='Disable PyAutoGUI failsafe (NOT RECOMMENDED)')
+    
+    args = parser.parse_args()
+    
+    setup_logging(log_level=args.log_level)
     
     try:
+        # Handle PyAutoGUI failsafe
+        if args.disable_failsafe:
+            logging.warning("⚠️  DISABLING PYAUTOGUI FAILSAFE - THIS IS NOT RECOMMENDED")
+            try:
+                import pyautogui
+                pyautogui.FAILSAFE = False
+            except ImportError:
+                pass
+        
         config = AutomationConfig()
-        automation = AqueductAutomation(config)
+        
+        # Override config with command line args
+        if args.max_runs > 0:
+            config.max_runs = args.max_runs
+        
+        automation = AqueductAutomation(config, debug_mode=args.debug, safe_mode=args.safe_mode)
         automation.start_automation()
         
     except Exception as e:

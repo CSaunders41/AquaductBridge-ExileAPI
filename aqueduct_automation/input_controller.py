@@ -66,12 +66,23 @@ class InputController:
                 self.logger.debug(f"Simulated click at ({x}, {y}) - no input library")
                 return False
             
+            # Validate coordinates - check if they're reasonable
+            if not self._validate_coordinates(x, y):
+                self.logger.warning(f"Invalid coordinates ({x}, {y}) - skipping click")
+                return False
+            
             # Respect minimum click delay
             current_time = time.time()
             if current_time - self.last_click_time < self.min_click_delay:
                 time.sleep(self.min_click_delay - (current_time - self.last_click_time))
             
             if self.input_method == "pyautogui":
+                # Additional safety check for PyAutoGUI
+                screen_width, screen_height = pyautogui.size()
+                if not (0 <= x <= screen_width and 0 <= y <= screen_height):
+                    self.logger.warning(f"Coordinates ({x}, {y}) outside screen bounds {screen_width}x{screen_height}")
+                    return False
+                
                 pyautogui.click(x, y, button=button)
                 self.logger.debug(f"PyAutoGUI click at ({x}, {y})")
                 
@@ -95,6 +106,18 @@ class InputController:
         except Exception as e:
             self.logger.error(f"Error clicking at ({x}, {y}): {e}")
             return False
+    
+    def _validate_coordinates(self, x: int, y: int) -> bool:
+        """Validate that coordinates are reasonable"""
+        # Check for obviously invalid coordinates
+        if x < -1000 or x > 10000 or y < -1000 or y > 10000:
+            return False
+        
+        # Check for coordinates that would trigger fail-safe
+        if x < 5 and y < 5:  # Top-left corner
+            return False
+        
+        return True
     
     def send_key(self, key: str) -> bool:
         """Send a key press"""
