@@ -12,6 +12,12 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <!-- Only compile RadarMovement.cs, exclude all other .cs files -->
+  <ItemGroup>
+    <Compile Remove="**/*.cs" />
+    <Compile Include="RadarMovement.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="ExileCore">
       <HintPath>..\..\..\..\ExileCore.dll</HintPath>
@@ -23,6 +29,14 @@
     </Reference>
     <Reference Include="SharpDX.Mathematics">
       <HintPath>..\..\..\..\SharpDX.Mathematics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\..\..\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>..\..\..\..\ImGui.NET.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

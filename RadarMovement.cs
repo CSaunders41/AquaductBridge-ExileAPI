@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Windows.Forms;
 using ExileCore;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
@@ -211,7 +210,9 @@ namespace RadarMovement
             {
                 // Click to move (simple approach like Radar)
                 Input.SetCursorPos(targetScreen);
-                Input.Click(MouseButtons.Left);
+                Mouse.LeftDown();
+                System.Threading.Thread.Sleep(10);
+                Mouse.LeftUp();
                 DebugWindow.LogMsg($"Moving to target at distance {distance:F1}");
             }
         }
