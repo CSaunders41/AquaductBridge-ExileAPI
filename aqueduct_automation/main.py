@@ -329,18 +329,18 @@ class AqueductAutomation:
             
             self.logger.debug(f"Current pos: {current_pos}, Distance to target: {distance_to_target:.2f}, Distance from start: {distance_from_start:.2f}")
             
-            if distance_to_target < 5:  # Close enough (tighter tolerance)
+            if distance_to_target < 20:  # More reasonable tolerance for Aqueduct
                 self.logger.debug("Reached target position")
                 break
                 
             # Check if stuck (haven't moved from start position)
-            if distance_from_start < 5:
+            if distance_from_start < 8:
                 if time.time() - start_time > 2.0:  # Been stuck for 2 seconds
                     self.logger.warning("Player appears stuck, trying alternate route")
                     break
             else:
                 # Player is moving, extend timeout slightly
-                if distance_from_start > 5:
+                if distance_from_start > 8:
                     self.logger.debug("Player is moving...")
                     
             time.sleep(0.1)
@@ -350,7 +350,7 @@ class AqueductAutomation:
         final_distance = calculate_distance(final_pos, target_pos)
         elapsed = time.time() - start_time
         
-        if final_distance < 5:
+        if final_distance < 20:
             self.logger.info(f"Successfully reached target in {elapsed:.2f}s")
             return True
         else:
