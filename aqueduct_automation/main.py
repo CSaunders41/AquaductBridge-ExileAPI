@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from api_client import AqueductAPIClient
 from pathfinding import PathfindingEngine
+from intelligent_pathfinding import IntelligentPathfinder
 from combat import CombatSystem
 from loot_manager import LootManager
 from resource_manager import ResourceManager
@@ -50,6 +51,7 @@ class AqueductAutomation:
         # Initialize components
         self.api_client = AqueductAPIClient(config.api_host, config.api_port)
         self.pathfinder = PathfindingEngine()
+        self.intelligent_pathfinder = IntelligentPathfinder()
         self.combat_system = CombatSystem(config.combat_config)
         self.loot_manager = LootManager(config.loot_config)
         self.resource_manager = ResourceManager(config.resource_config)
@@ -198,13 +200,14 @@ class AqueductAutomation:
             if self.debug_mode:
                 self._debug_entity_coordinates(game_data)
             
-            # Create navigation path through Aqueduct
-            path = self.pathfinder.create_aqueduct_path(
+            # Create intelligent navigation path through Aqueduct
+            path = self.intelligent_pathfinder.create_intelligent_path(
                 game_data['player_pos'],
-                game_data['terrain_string']
+                game_data['terrain_string'],
+                game_data['awake_entities']
             )
             
-            self.logger.info(f"Created path with {len(path)} waypoints")
+            self.logger.info(f"Created intelligent path with {len(path)} waypoints")
             
             # Follow the path, fighting and looting
             successful_moves = 0
