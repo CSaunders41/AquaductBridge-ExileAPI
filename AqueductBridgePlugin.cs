@@ -17,6 +17,8 @@ using ExileCore.Shared.Nodes;
 using Newtonsoft.Json;
 using SharpDX;
 using Vector3 = System.Numerics.Vector3;
+using Vector2 = System.Numerics.Vector2;
+using ImGuiNET;
 
 namespace AqueductBridge
 {
@@ -63,10 +65,10 @@ namespace AqueductBridge
             {
                 if (ImGui.Begin("AqueductBridge"))
                 {
-                    ImGui.Text($"Server Status: {(_isServerRunning ? "Running" : "Stopped")}");
+                    ImGui.Text($"Server Status: {(isRunning ? "Running" : "Stopped")}");
                     ImGui.Text($"Port: {Settings.HttpServerPort.Value}");
                     
-                    if (_isServerRunning)
+                    if (isRunning)
                     {
                         ImGui.Text("Available Endpoints:");
                         ImGui.BulletText("/gameInfo - Basic game info");
@@ -105,13 +107,13 @@ namespace AqueductBridge
 
         private void StartHttpServer()
         {
-            if (_isServerRunning) return;
+            if (isRunning) return;
 
             try
             {
-                _cancellationTokenSource = new CancellationTokenSource();
-                _serverTask = Task.Run(() => RunHttpServer(_cancellationTokenSource.Token));
-                _isServerRunning = true;
+                cancellationTokenSource = new CancellationTokenSource();
+                serverTask = Task.Run(() => RunHttpServer(cancellationTokenSource.Token));
+                isRunning = true;
                 DebugWindow.LogMsg($"HTTP Server started on port {Settings.HttpServerPort.Value}");
             }
             catch (Exception ex)
@@ -122,14 +124,14 @@ namespace AqueductBridge
 
         private void StopHttpServer()
         {
-            if (!_isServerRunning) return;
+            if (!isRunning) return;
 
             try
             {
-                _cancellationTokenSource?.Cancel();
-                _httpListener?.Stop();
-                _httpListener?.Close();
-                _isServerRunning = false;
+                cancellationTokenSource?.Cancel();
+                httpListener?.Stop();
+                httpListener?.Close();
+                isRunning = false;
                 DebugWindow.LogMsg("HTTP Server stopped");
             }
             catch (Exception ex)
@@ -140,18 +142,18 @@ namespace AqueductBridge
 
         private async Task RunHttpServer(CancellationToken cancellationToken)
         {
-            _httpListener = new HttpListener();
-            _httpListener.Prefixes.Add($"http://127.0.0.1:{Settings.HttpServerPort.Value}/");
+            httpListener = new HttpListener();
+            httpListener.Prefixes.Add($"http://127.0.0.1:{Settings.HttpServerPort.Value}/");
             
             try
             {
-                _httpListener.Start();
+                httpListener.Start();
                 
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
-                        var context = await _httpListener.GetContextAsync();
+                        var context = await httpListener.GetContextAsync();
                         _ = Task.Run(() => ProcessRequest(context), cancellationToken);
                     }
                     catch (ObjectDisposedException)
@@ -170,7 +172,7 @@ namespace AqueductBridge
             }
             finally
             {
-                _httpListener?.Close();
+                httpListener?.Close();
             }
         }
 
@@ -193,7 +195,7 @@ namespace AqueductBridge
                     return;
                 }
 
-                var responseData = GetGameData(request.Url);
+                var responseData = GetGameData(request.Url, context);
                 var responseString = JsonConvert.SerializeObject(responseData);
                 var responseBytes = Encoding.UTF8.GetBytes(responseString);
                 
@@ -218,7 +220,7 @@ namespace AqueductBridge
             }
         }
 
-        private object GetGameData(Uri url)
+        private object GetGameData(Uri url, HttpListenerContext context)
         {
             try
             {
@@ -540,14 +542,16 @@ namespace AqueductBridge
         {
             try
             {
-                // Map ExileApi entity types to aqueduct_runner expected values
-                if (entity.Type == EntityType.Monster)
+                // Check for important entities by path
+                var path = entity.Path?.ToLower() ?? "";
+                
+                // Check for monsters first
+                if (path.Contains("monster") || path.Contains("enemy") || 
+                    entity.HasComponent<Monster>())
                 {
                     return 14; // aqueduct_runner expects 14 for monsters
                 }
-
-                // Check for important entities by path
-                var path = entity.Path?.ToLower() ?? "";
+                
                 if (path.Contains("door") || path.Contains("waypoint") || 
                     path.Contains("transition") || path.Contains("stash"))
                 {
@@ -632,8 +636,8 @@ namespace AqueductBridge
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
                                 Graphics.DrawLine(
-                                    new Vector2(playerScreenPos.X, playerScreenPos.Y),
-                                    new Vector2(firstScreenPos.X, firstScreenPos.Y),
+                                    new SharpDX.Vector2(playerScreenPos.X, playerScreenPos.Y),
+                                    new SharpDX.Vector2(firstScreenPos.X, firstScreenPos.Y),
                                     Settings.PathLineWidth.Value,
                                     Settings.PathLineColor.Value
                                 );
@@ -652,8 +656,8 @@ namespace AqueductBridge
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
                                 Graphics.DrawLine(
-                                    new Vector2(fromScreenPos.X, fromScreenPos.Y),
-                                    new Vector2(toScreenPos.X, toScreenPos.Y),
+                                    new SharpDX.Vector2(fromScreenPos.X, fromScreenPos.Y),
+                                    new SharpDX.Vector2(toScreenPos.X, toScreenPos.Y),
                                     Settings.PathLineWidth.Value,
                                     Settings.PathLineColor.Value
                                 );
@@ -669,7 +673,7 @@ namespace AqueductBridge
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
-                            var screenPos = new Vector2(targetScreenPos.X, targetScreenPos.Y);
+                            var screenPos = new SharpDX.Vector2(targetScreenPos.X, targetScreenPos.Y);
                             var radius = 10f;
                             
                             // Draw target circle
@@ -677,14 +681,14 @@ namespace AqueductBridge
                             
                             // Draw target cross
                             Graphics.DrawLine(
-                                new Vector2(screenPos.X - radius, screenPos.Y),
-                                new Vector2(screenPos.X + radius, screenPos.Y),
+                                new SharpDX.Vector2(screenPos.X - radius, screenPos.Y),
+                                new SharpDX.Vector2(screenPos.X + radius, screenPos.Y),
                                 Settings.PathLineWidth.Value,
                                 Settings.TargetMarkerColor.Value
                             );
                             Graphics.DrawLine(
-                                new Vector2(screenPos.X, screenPos.Y - radius),
-                                new Vector2(screenPos.X, screenPos.Y + radius),
+                                new SharpDX.Vector2(screenPos.X, screenPos.Y - radius),
+                                new SharpDX.Vector2(screenPos.X, screenPos.Y + radius),
                                 Settings.PathLineWidth.Value,
                                 Settings.TargetMarkerColor.Value
                             );
