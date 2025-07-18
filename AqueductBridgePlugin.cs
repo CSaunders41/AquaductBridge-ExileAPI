@@ -5,6 +5,11 @@ using ExileCore.Shared.Attributes;
 using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
 using ImGuiNET;
+using System.Net;
+using System.IO;
+using System.Text;
+using Newtonsoft.Json;
+using System.Threading;
 
 namespace AqueductBridge
 {
@@ -14,212 +19,268 @@ namespace AqueductBridge
     [PluginAuthor("AqueductBridge")]
     public class AqueductBridgePlugin : BaseSettingsPlugin<AqueductBridgeSettings>
     {
-        private HttpServer _httpServer;
-        private DataExtractor _dataExtractor;
-        private bool _isInitialized = false;
-        private Exception _lastError;
+        private HttpListener _httpListener;
+        private bool _isServerRunning = false;
+        private Task _serverTask;
+        private CancellationTokenSource _cancellationTokenSource;
 
         public override bool Initialise()
         {
             try
             {
-                _dataExtractor = new DataExtractor(GameController, Settings);
-                _httpServer = new HttpServer(GameController, _dataExtractor, Settings);
+                LogMessage("AqueductBridge plugin initializing...");
                 
-                _isInitialized = true;
-
                 if (Settings.AutoStartServer.Value)
                 {
-                    Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _httpServer.StartAsync();
-                        }
-                        catch (Exception ex)
-                        {
-                            _lastError = ex;
-                            DebugWindow.LogError($"AqueductBridge auto-start failed: {ex.Message}");
-                        }
-                    });
+                    StartHttpServer();
                 }
 
-                DebugWindow.LogMsg("AqueductBridge plugin initialized successfully");
+                LogMessage("AqueductBridge plugin initialized successfully");
                 return true;
             }
             catch (Exception ex)
             {
-                _lastError = ex;
-                DebugWindow.LogError($"AqueductBridge initialization failed: {ex.Message}");
+                LogError($"Failed to initialize AqueductBridge: {ex.Message}");
                 return false;
             }
         }
 
         public override void Render()
         {
-            if (!_isInitialized) return;
+            if (!Settings.Enable.Value) return;
+
+            if (ImGui.Begin("AqueductBridge"))
+            {
+                ImGui.Text($"Server Status: {(_isServerRunning ? "Running" : "Stopped")}");
+                ImGui.Text($"Port: {Settings.HttpServerPort.Value}");
+                
+                if (_isServerRunning)
+                {
+                    if (ImGui.Button("Stop Server"))
+                    {
+                        StopHttpServer();
+                    }
+                }
+                else
+                {
+                    if (ImGui.Button("Start Server"))
+                    {
+                        StartHttpServer();
+                    }
+                }
+
+                ImGui.End();
+            }
+        }
+
+        private void StartHttpServer()
+        {
+            if (_isServerRunning) return;
 
             try
             {
-                if (ImGui.CollapsingHeader("AqueductBridge Status"))
+                _cancellationTokenSource = new CancellationTokenSource();
+                _serverTask = Task.Run(() => RunHttpServer(_cancellationTokenSource.Token));
+                _isServerRunning = true;
+                LogMessage($"HTTP Server started on port {Settings.HttpServerPort.Value}");
+            }
+            catch (Exception ex)
+            {
+                LogError($"Failed to start HTTP server: {ex.Message}");
+            }
+        }
+
+        private void StopHttpServer()
+        {
+            if (!_isServerRunning) return;
+
+            try
+            {
+                _cancellationTokenSource?.Cancel();
+                _httpListener?.Stop();
+                _httpListener?.Close();
+                _isServerRunning = false;
+                LogMessage("HTTP Server stopped");
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error stopping HTTP server: {ex.Message}");
+            }
+        }
+
+        private async Task RunHttpServer(CancellationToken cancellationToken)
+        {
+            _httpListener = new HttpListener();
+            _httpListener.Prefixes.Add($"http://127.0.0.1:{Settings.HttpServerPort.Value}/");
+            
+            try
+            {
+                _httpListener.Start();
+                
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    // Server status
-                    var serverStatus = _httpServer?.IsRunning == true ? "Running" : "Stopped";
-                    var statusColor = _httpServer?.IsRunning == true ? 
-                        new System.Numerics.Vector4(0, 1, 0, 1) : // Green
-                        new System.Numerics.Vector4(1, 0, 0, 1);  // Red
-
-                    ImGui.TextColored(statusColor, $"HTTP Server: {serverStatus}");
-                    
-                    if (_httpServer?.IsRunning == true)
+                    try
                     {
-                        ImGui.Text($"Listening on: http://127.0.0.1:{Settings.HttpServerPort.Value}");
+                        var context = await _httpListener.GetContextAsync();
+                        _ = Task.Run(() => ProcessRequest(context), cancellationToken);
                     }
-
-                    ImGui.Separator();
-
-                    // Control buttons
-                    if (_httpServer?.IsRunning == true)
+                    catch (ObjectDisposedException)
                     {
-                        if (ImGui.Button("Stop Server"))
-                        {
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    _httpServer.Stop();
-                                    DebugWindow.LogMsg("AqueductBridge HTTP Server stopped manually");
-                                }
-                                catch (Exception ex)
-                                {
-                                    _lastError = ex;
-                                    DebugWindow.LogError($"AqueductBridge stop error: {ex.Message}");
-                                }
-                            });
-                        }
+                        break; // Server was stopped
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        if (ImGui.Button("Start Server"))
-                        {
-                            Task.Run(async () =>
-                            {
-                                try
-                                {
-                                    await _httpServer.StartAsync();
-                                    DebugWindow.LogMsg("AqueductBridge HTTP Server started manually");
-                                }
-                                catch (Exception ex)
-                                {
-                                    _lastError = ex;
-                                    DebugWindow.LogError($"AqueductBridge start error: {ex.Message}");
-                                }
-                            });
-                        }
-                    }
-
-                    ImGui.Separator();
-
-                    // Endpoint information
-                    if (ImGui.CollapsingHeader("Endpoint Information"))
-                    {
-                        ImGui.Text("Available Endpoints:");
-                        ImGui.BulletText($"GET /gameInfo?type=full - Complete game data");
-                        ImGui.BulletText($"GET /gameInfo - Instance data only");
-                        ImGui.BulletText($"GET /positionOnScreen?y={{y}}&x={{x}} - Grid to screen conversion");
-                        
-                        if (_httpServer?.IsRunning == true)
-                        {
-                            ImGui.Separator();
-                            ImGui.Text("Test URLs:");
-                            ImGui.Text($"http://127.0.0.1:{Settings.HttpServerPort.Value}/gameInfo?type=full");
-                            ImGui.Text($"http://127.0.0.1:{Settings.HttpServerPort.Value}/gameInfo");
-                            ImGui.Text($"http://127.0.0.1:{Settings.HttpServerPort.Value}/positionOnScreen?y=100&x=100");
-                        }
-                    }
-
-                    // Error information
-                    if (_lastError != null)
-                    {
-                        ImGui.Separator();
-                        ImGui.TextColored(new System.Numerics.Vector4(1, 0, 0, 1), "Last Error:");
-                        ImGui.TextWrapped(_lastError.Message);
-                        
-                        if (ImGui.Button("Clear Error"))
-                        {
-                            _lastError = null;
-                        }
-                    }
-
-                    // Game state information
-                    if (ImGui.CollapsingHeader("Game State"))
-                    {
-                        var player = GameController.Player;
-                        if (player != null && player.IsValid)
-                        {
-                            var gridPos = player.GridPos;
-                            ImGui.Text($"Player Position: ({gridPos.X:F0}, {gridPos.Y:F0}, {gridPos.Z:F0})");
-                            
-                            var windowRect = GameController.Window.GetWindowRectangle();
-                            ImGui.Text($"Window: ({windowRect.X}, {windowRect.Y}) {windowRect.Width}x{windowRect.Height}");
-                            
-                            var entityCount = GameController.EntityListWrapper?.ValidEntitiesByType?.Values?.Count ?? 0;
-                            ImGui.Text($"Valid Entities: {entityCount}");
-                            
-                            var areaName = GameController.Area?.CurrentArea?.Name ?? "Unknown";
-                            ImGui.Text($"Current Area: {areaName}");
-                        }
-                        else
-                        {
-                            ImGui.Text("Player not available");
-                        }
+                        LogError($"Error accepting HTTP request: {ex.Message}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                _lastError = ex;
-                ImGui.TextColored(new System.Numerics.Vector4(1, 0, 0, 1), $"Render Error: {ex.Message}");
+                LogError($"HTTP server error: {ex.Message}");
             }
+            finally
+            {
+                _httpListener?.Close();
+            }
+        }
+
+        private void ProcessRequest(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                var response = context.Response;
+                
+                // Set CORS headers
+                response.Headers.Add("Access-Control-Allow-Origin", "*");
+                response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+                
+                if (request.HttpMethod == "OPTIONS")
+                {
+                    response.StatusCode = 200;
+                    response.Close();
+                    return;
+                }
+
+                var responseData = GetGameData(request.Url.AbsolutePath);
+                var responseString = JsonConvert.SerializeObject(responseData);
+                var responseBytes = Encoding.UTF8.GetBytes(responseString);
+                
+                response.ContentType = "application/json";
+                response.ContentLength64 = responseBytes.Length;
+                response.StatusCode = 200;
+                
+                using (var output = response.OutputStream)
+                {
+                    output.Write(responseBytes, 0, responseBytes.Length);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error processing request: {ex.Message}");
+                try
+                {
+                    context.Response.StatusCode = 500;
+                    context.Response.Close();
+                }
+                catch { }
+            }
+        }
+
+        private object GetGameData(string path)
+        {
+            try
+            {
+                switch (path)
+                {
+                    case "/gameInfo":
+                        return GetGameInfo();
+                    case "/player":
+                        return GetPlayerData();
+                    case "/area":
+                        return GetAreaData();
+                    default:
+                        return new { error = "Unknown endpoint" };
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error getting game data: {ex.Message}");
+                return new { error = ex.Message };
+            }
+        }
+
+        private object GetGameInfo()
+        {
+            if (GameController?.Player == null)
+                return new { error = "Game not loaded" };
+
+            return new
+            {
+                player_name = GameController.Player.GetComponent<ExileCore.PoEMemory.Components.Player>()?.PlayerName ?? "Unknown",
+                area_name = GameController.Area?.CurrentArea?.Name ?? "Unknown",
+                in_game = GameController.InGame,
+                window_focused = GameController.Window.IsForeground()
+            };
+        }
+
+        private object GetPlayerData()
+        {
+            if (GameController?.Player == null)
+                return new { error = "Player not found" };
+
+            var player = GameController.Player;
+            var life = player.GetComponent<ExileCore.PoEMemory.Components.Life>();
+            var pos = player.GetComponent<ExileCore.PoEMemory.Components.Render>();
+
+            return new
+            {
+                position = new { x = pos?.Pos.X ?? 0, y = pos?.Pos.Y ?? 0 },
+                health = new 
+                { 
+                    current = life?.CurHP ?? 0, 
+                    max = life?.MaxHP ?? 0, 
+                    percentage = life?.HPPercentage ?? 0 
+                },
+                mana = new 
+                { 
+                    current = life?.CurMana ?? 0, 
+                    max = life?.MaxMana ?? 0, 
+                    percentage = life?.ManaPercentage ?? 0 
+                }
+            };
+        }
+
+        private object GetAreaData()
+        {
+            if (GameController?.Area == null)
+                return new { error = "Area not loaded" };
+
+            return new
+            {
+                area_name = GameController.Area.CurrentArea?.Name ?? "Unknown",
+                area_id = GameController.Area.CurrentArea?.Id ?? "Unknown",
+                is_loading = GameController.IsLoading
+            };
         }
 
         public override void OnClose()
         {
-            try
-            {
-                _httpServer?.Stop();
-                DebugWindow.LogMsg("AqueductBridge plugin closed");
-            }
-            catch (Exception ex)
-            {
-                DebugWindow.LogError($"AqueductBridge close error: {ex.Message}");
-            }
+            StopHttpServer();
         }
 
-        public override void AreaChange(AreaInstance area)
+        private void LogMessage(string message)
         {
             if (Settings.EnableDebugLogging.Value)
             {
-                DebugWindow.LogMsg($"AqueductBridge area changed to: {area.Name}");
+                DebugWindow.LogMsg($"[AqueductBridge] {message}");
             }
         }
 
-        public override void EntityAdded(Entity entity)
+        private void LogError(string message)
         {
-            // We could log entity additions here if needed for debugging
-            if (Settings.EnableDebugLogging.Value && entity?.Path != null)
-            {
-                if (entity.Path.Contains("Door") || entity.Path.Contains("Waypoint") || 
-                    entity.Path.Contains("Transition") || entity.Path.Contains("Stash"))
-                {
-                    DebugWindow.LogMsg($"AqueductBridge important entity added: {entity.Path}");
-                }
-            }
-        }
-
-        public override void EntityRemoved(Entity entity)
-        {
-            // We could log entity removals here if needed for debugging
+            DebugWindow.LogError($"[AqueductBridge] {message}");
         }
     }
 } 
