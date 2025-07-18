@@ -211,7 +211,7 @@ namespace AqueductBridge
                 {
                     case "/gameInfo":
                         var type = query["type"];
-                        if (type == "full")
+                        if (string.Equals(type, "full", StringComparison.OrdinalIgnoreCase))
                         {
                             return GetFullGameData();
                         }

@@ -1,0 +1,13 @@
+requests>=2.28.0
+dataclasses>=0.8
+typing-extensions>=4.0.0
+pathlib>=1.0.1
+
+# Optional dependencies for enhanced functionality
+# Uncomment if you want to use these features
+
+# PyAutoGUI>=0.9.54  # For direct mouse/keyboard control
+# pynput>=1.7.6      # Alternative input control
+# numpy>=1.21.0      # For advanced pathfinding calculations
+# matplotlib>=3.5.0  # For visualization and debugging
+# pillow>=9.0.0      # For image processing and screenshots 
