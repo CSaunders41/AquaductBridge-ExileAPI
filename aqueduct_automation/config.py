@@ -9,9 +9,9 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from combat import CombatConfig, create_combat_config
-from loot_manager import LootConfig, create_loot_config
-from resource_manager import ResourceConfig, create_resource_config
+from .combat import CombatConfig, create_combat_config
+from .loot_manager import LootConfig, create_loot_config
+from .resource_manager import ResourceConfig, create_resource_config
 
 @dataclass
 class AutomationConfig:

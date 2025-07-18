@@ -9,14 +9,14 @@ import logging
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
-from api_client import AqueductAPIClient
-from pathfinding import PathfindingEngine
-from intelligent_pathfinding import IntelligentPathfinder
-from combat import CombatSystem
-from loot_manager import LootManager
-from resource_manager import ResourceManager
-from config import AutomationConfig
-from utils import setup_logging, calculate_distance, safe_sleep
+from .api_client import AqueductAPIClient
+from .pathfinding import PathfindingEngine
+from .intelligent_pathfinding import IntelligentPathfinder
+from .combat import CombatSystem
+from .loot_manager import LootManager
+from .resource_manager import ResourceManager
+from .config import AutomationConfig
+from .utils import setup_logging, calculate_distance, safe_sleep
 
 @dataclass
 class FarmingStats:
@@ -86,6 +86,9 @@ class AqueductAutomation:
         self.logger.info("Starting Aqueduct Automation System")
         self.running = True
         self.stats.start_time = time.time()
+        
+        # Clear any existing path visualization
+        self.api_client.clear_path_visualization()
         
         try:
             while self.running:
@@ -208,6 +211,11 @@ class AqueductAutomation:
             )
             
             self.logger.info(f"Created intelligent path with {len(path)} waypoints")
+            
+            # Send path data to plugin for visualization
+            if len(path) > 0:
+                target = path[-1] if path else None  # Last waypoint is the target
+                self.api_client.send_path_data(path, target)
             
             # Follow the path, fighting and looting
             successful_moves = 0
@@ -493,6 +501,9 @@ class AqueductAutomation:
         """Cleanup resources"""
         self.running = False
         self.stats.total_runtime = time.time() - self.stats.start_time
+        
+        # Clear path visualization
+        self.api_client.clear_path_visualization()
         
         # Log final stats
         efficiency = self.stats.get_efficiency_stats()

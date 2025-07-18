@@ -1,33 +1,68 @@
 using System;
-using System.Threading.Tasks;
-using ExileCore;
-using ExileCore.Shared.Interfaces;
-using ExileCore.Shared.Nodes;
-using ImGuiNET;
-using System.Net;
-using System.IO;
-using System.Text;
-using Newtonsoft.Json;
-using System.Threading;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using System.Web;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.IO;
+using ExileCore;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
-using ExileCore.Shared.Enums;
+using ExileCore.Shared.Attributes;
+using ExileCore.Shared.Interfaces;
+using ExileCore.Shared.Nodes;
+using Newtonsoft.Json;
 using SharpDX;
-using ExileCore.PoEMemory;
-using GameOffsets.Native;
-using System.Reflection;
+using Vector3 = System.Numerics.Vector3;
 
 namespace AqueductBridge
 {
+    public class AqueductBridgeSettings : ISettings
+    {
+        [Menu("Enable Plugin")]
+        public ToggleNode Enable { get; set; } = new ToggleNode(true);
+        
+        [Menu("HTTP Server Port")]
+        public RangeNode<int> HttpServerPort { get; set; } = new RangeNode<int>(50002, 1024, 65535);
+        
+        [Menu("Enable Debug Logging")]
+        public ToggleNode EnableDebugLogging { get; set; } = new ToggleNode(false);
+        
+        [Menu("Auto Start Server")]
+        public ToggleNode AutoStartServer { get; set; } = new ToggleNode(true);
+        
+        [Menu("Show Visual Path")]
+        public ToggleNode ShowVisualPath { get; set; } = new ToggleNode(true);
+        
+        [Menu("Path Line Color")]
+        public ColorNode PathLineColor { get; set; } = new ColorNode(Color.Yellow);
+        
+        [Menu("Path Line Width")]
+        public RangeNode<int> PathLineWidth { get; set; } = new RangeNode<int>(3, 1, 10);
+        
+        [Menu("Show Target Marker")]
+        public ToggleNode ShowTargetMarker { get; set; } = new ToggleNode(true);
+        
+        [Menu("Target Marker Color")]
+        public ColorNode TargetMarkerColor { get; set; } = new ColorNode(Color.Red);
+    }
+
     public class AqueductBridgePlugin : BaseSettingsPlugin<AqueductBridgeSettings>
     {
-        private HttpListener _httpListener;
-        private bool _isServerRunning = false;
-        private Task _serverTask;
-        private CancellationTokenSource _cancellationTokenSource;
+        private HttpListener httpListener;
+        private bool isRunning = false;
+        private Task serverTask;
+        private CancellationTokenSource cancellationTokenSource;
+        private string lastError = "";
+        
+        // Visual path data
+        private List<Vector2> currentPath = new List<Vector2>();
+        private Vector2? targetPosition = null;
+        private DateTime lastPathUpdate = DateTime.MinValue;
+        private readonly object pathLock = new object();
 
         public override bool Initialise()
         {
@@ -54,34 +89,47 @@ namespace AqueductBridge
         {
             if (!Settings.Enable.Value) return;
 
-            if (ImGui.Begin("AqueductBridge"))
+            try
             {
-                ImGui.Text($"Server Status: {(_isServerRunning ? "Running" : "Stopped")}");
-                ImGui.Text($"Port: {Settings.HttpServerPort.Value}");
-                
-                if (_isServerRunning)
+                if (ImGui.Begin("AqueductBridge"))
                 {
-                    ImGui.Text("Available Endpoints:");
-                    ImGui.BulletText("/gameInfo - Basic game info");
-                    ImGui.BulletText("/gameInfo?type=full - Full automation data");
-                    ImGui.BulletText("/player - Player data");
-                    ImGui.BulletText("/area - Area data");
-                    ImGui.BulletText("/positionOnScreen?y={y}&x={x} - Coordinate conversion");
+                    ImGui.Text($"Server Status: {(_isServerRunning ? "Running" : "Stopped")}");
+                    ImGui.Text($"Port: {Settings.HttpServerPort.Value}");
                     
-                    if (ImGui.Button("Stop Server"))
+                    if (_isServerRunning)
                     {
-                        StopHttpServer();
+                        ImGui.Text("Available Endpoints:");
+                        ImGui.BulletText("/gameInfo - Basic game info");
+                        ImGui.BulletText("/gameInfo?type=full - Full automation data");
+                        ImGui.BulletText("/player - Player data");
+                        ImGui.BulletText("/area - Area data");
+                        ImGui.BulletText("/positionOnScreen?y={y}&x={x} - Coordinate conversion");
+                        
+                        if (ImGui.Button("Stop Server"))
+                        {
+                            StopHttpServer();
+                        }
                     }
-                }
-                else
-                {
-                    if (ImGui.Button("Start Server"))
+                    else
                     {
-                        StartHttpServer();
+                        if (ImGui.Button("Start Server"))
+                        {
+                            StartHttpServer();
+                        }
                     }
+
+                    ImGui.End();
                 }
 
-                ImGui.End();
+                // Render visual path if enabled
+                if (Settings.ShowVisualPath.Value)
+                {
+                    RenderVisualPath();
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error in Render: {ex.Message}");
             }
         }
 
@@ -222,6 +270,10 @@ namespace AqueductBridge
                         return GetAreaData();
                     case "/positionOnScreen":
                         return GetPositionOnScreen(query["x"], query["y"]);
+                    case "/updatePath":
+                        return HandleUpdatePath(context);
+                    case "/clearPath":
+                        return HandleClearPath();
                     default:
                         return new { error = "Unknown endpoint" };
                 }
@@ -581,6 +633,205 @@ namespace AqueductBridge
             catch (Exception ex)
             {
                 DebugWindow.LogError($"Error getting life data: {ex.Message}");
+                return new { error = ex.Message };
+            }
+        }
+
+        private void RenderVisualPath()
+        {
+            try
+            {
+                if (!GameController.InGame || GameController.Player == null)
+                    return;
+
+                lock (pathLock)
+                {
+                    // Draw path lines
+                    if (currentPath.Count > 1)
+                    {
+                        var camera = GameController.IngameState.Camera;
+                        var playerPos = GameController.Player.GridPos;
+                        var playerScreenPos = camera.WorldToScreen(new Vector3(playerPos.X, playerPos.Y, 0));
+
+                        // Draw line from player to first waypoint
+                        if (currentPath.Count > 0)
+                        {
+                            var firstWaypoint = currentPath[0];
+                            var firstScreenPos = camera.WorldToScreen(new Vector3(firstWaypoint.X, firstWaypoint.Y, 0));
+                            
+                            if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
+                            {
+                                Graphics.DrawLine(
+                                    new Vector2(playerScreenPos.X, playerScreenPos.Y),
+                                    new Vector2(firstScreenPos.X, firstScreenPos.Y),
+                                    Settings.PathLineWidth.Value,
+                                    Settings.PathLineColor.Value
+                                );
+                            }
+                        }
+
+                        // Draw lines between waypoints
+                        for (int i = 0; i < currentPath.Count - 1; i++)
+                        {
+                            var fromPos = currentPath[i];
+                            var toPos = currentPath[i + 1];
+                            
+                            var fromScreenPos = camera.WorldToScreen(new Vector3(fromPos.X, fromPos.Y, 0));
+                            var toScreenPos = camera.WorldToScreen(new Vector3(toPos.X, toPos.Y, 0));
+                            
+                            if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
+                            {
+                                Graphics.DrawLine(
+                                    new Vector2(fromScreenPos.X, fromScreenPos.Y),
+                                    new Vector2(toScreenPos.X, toScreenPos.Y),
+                                    Settings.PathLineWidth.Value,
+                                    Settings.PathLineColor.Value
+                                );
+                            }
+                        }
+                    }
+
+                    // Draw target marker
+                    if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
+                    {
+                        var camera = GameController.IngameState.Camera;
+                        var targetScreenPos = camera.WorldToScreen(new Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0));
+                        
+                        if (IsValidScreenPosition(targetScreenPos))
+                        {
+                            var screenPos = new Vector2(targetScreenPos.X, targetScreenPos.Y);
+                            var radius = 10f;
+                            
+                            // Draw target circle
+                            Graphics.DrawEllipse(screenPos, radius, Settings.TargetMarkerColor.Value, Settings.PathLineWidth.Value);
+                            
+                            // Draw target cross
+                            Graphics.DrawLine(
+                                new Vector2(screenPos.X - radius, screenPos.Y),
+                                new Vector2(screenPos.X + radius, screenPos.Y),
+                                Settings.PathLineWidth.Value,
+                                Settings.TargetMarkerColor.Value
+                            );
+                            Graphics.DrawLine(
+                                new Vector2(screenPos.X, screenPos.Y - radius),
+                                new Vector2(screenPos.X, screenPos.Y + radius),
+                                Settings.PathLineWidth.Value,
+                                Settings.TargetMarkerColor.Value
+                            );
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error rendering visual path: {ex.Message}");
+            }
+        }
+
+        private bool IsValidScreenPosition(Vector3 screenPos)
+        {
+            var windowRect = GameController.Window.GetWindowRectangle();
+            return screenPos.X >= 0 && screenPos.X <= windowRect.Width &&
+                   screenPos.Y >= 0 && screenPos.Y <= windowRect.Height;
+        }
+
+        public void UpdateVisualPath(List<Dictionary<string, object>> waypoints, Dictionary<string, object> target = null)
+        {
+            try
+            {
+                lock (pathLock)
+                {
+                    currentPath.Clear();
+                    
+                    if (waypoints != null)
+                    {
+                        foreach (var waypoint in waypoints)
+                        {
+                            if (waypoint.ContainsKey("x") && waypoint.ContainsKey("y"))
+                            {
+                                var x = Convert.ToSingle(waypoint["x"]);
+                                var y = Convert.ToSingle(waypoint["y"]);
+                                currentPath.Add(new Vector2(x, y));
+                            }
+                        }
+                    }
+                    
+                    if (target != null && target.ContainsKey("x") && target.ContainsKey("y"))
+                    {
+                        var x = Convert.ToSingle(target["x"]);
+                        var y = Convert.ToSingle(target["y"]);
+                        targetPosition = new Vector2(x, y);
+                    }
+                    else
+                    {
+                        targetPosition = null;
+                    }
+                    
+                    lastPathUpdate = DateTime.Now;
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error updating visual path: {ex.Message}");
+            }
+        }
+
+        public void ClearVisualPath()
+        {
+            lock (pathLock)
+            {
+                currentPath.Clear();
+                targetPosition = null;
+            }
+        }
+
+        private object HandleUpdatePath(HttpListenerContext context)
+        {
+            try
+            {
+                if (context.Request.HttpMethod != "POST")
+                {
+                    return new { error = "Method not allowed" };
+                }
+
+                using (var reader = new StreamReader(context.Request.InputStream))
+                {
+                    var json = reader.ReadToEnd();
+                    var pathData = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                    
+                    if (pathData.ContainsKey("waypoints"))
+                    {
+                        var waypoints = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(pathData["waypoints"].ToString());
+                        var target = pathData.ContainsKey("target") ? 
+                                   JsonConvert.DeserializeObject<Dictionary<string, object>>(pathData["target"].ToString()) : null;
+                        
+                        UpdateVisualPath(waypoints, target);
+                        
+                        return new { success = true, message = "Path updated successfully" };
+                    }
+                    else
+                    {
+                        return new { error = "Invalid path data" };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error handling update path: {ex.Message}");
+                return new { error = ex.Message };
+            }
+        }
+
+        private object HandleClearPath()
+        {
+            try
+            {
+                ClearVisualPath();
+                return new { success = true, message = "Path cleared successfully" };
+            }
+            catch (Exception ex)
+            {
+                DebugWindow.LogError($"Error handling clear path: {ex.Message}");
                 return new { error = ex.Message };
             }
         }

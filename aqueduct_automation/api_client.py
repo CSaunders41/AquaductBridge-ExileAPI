@@ -332,3 +332,36 @@ class AqueductAPIClient:
                 self.logger.warning("API not connected")
         except Exception as e:
             self.logger.error(f"Failed to log API stats: {e}") 
+
+    def send_path_data(self, waypoints: List[Dict[str, Any]], target: Dict[str, Any] = None):
+        """Send path data to the plugin for visualization"""
+        try:
+            path_data = {
+                "waypoints": waypoints,
+                "target": target
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/updatePath",
+                json=path_data,
+                headers={'Content-Type': 'application/json'}
+            )
+            response.raise_for_status()
+            
+            self.logger.debug(f"Sent path data: {len(waypoints)} waypoints")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to send path data: {e}")
+            return False
+
+    def clear_path_visualization(self):
+        """Clear the path visualization"""
+        try:
+            response = self.session.post(f"{self.base_url}/clearPath")
+            response.raise_for_status()
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to clear path visualization: {e}")
+            return False 
