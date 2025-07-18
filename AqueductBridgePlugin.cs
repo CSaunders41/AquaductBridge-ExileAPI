@@ -16,8 +16,6 @@ using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
 using Newtonsoft.Json;
 using SharpDX;
-using Vector3 = System.Numerics.Vector3;
-using Vector2 = System.Numerics.Vector2;
 using ImGuiNET;
 
 namespace AqueductBridge
@@ -631,7 +629,7 @@ namespace AqueductBridge
                         if (currentPath.Count > 0)
                         {
                             var firstWaypoint = currentPath[0];
-                            var firstScreenPos = camera.WorldToScreen(new Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
+                            var firstScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
                             
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
@@ -650,8 +648,8 @@ namespace AqueductBridge
                             var fromPos = currentPath[i];
                             var toPos = currentPath[i + 1];
                             
-                            var fromScreenPos = camera.WorldToScreen(new Vector3(fromPos.X, fromPos.Y, 0f));
-                            var toScreenPos = camera.WorldToScreen(new Vector3(toPos.X, toPos.Y, 0f));
+                            var fromScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(fromPos.X, fromPos.Y, 0f));
+                            var toScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(toPos.X, toPos.Y, 0f));
                             
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
@@ -669,15 +667,15 @@ namespace AqueductBridge
                     if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
                     {
                         var camera = GameController.IngameState.Camera;
-                        var targetScreenPos = camera.WorldToScreen(new Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
+                        var targetScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
-                            var screenPos = new Vector2(targetScreenPos.X, targetScreenPos.Y);
+                            var screenPos = new System.Numerics.Vector2(targetScreenPos.X, targetScreenPos.Y);
                             var radius = 10f;
                             
                             // Draw target circle
-                            Graphics.DrawEllipse(screenPos, new Vector2(radius * 2, radius * 2), Settings.TargetMarkerColor.Value, Settings.PathLineWidth.Value);
+                            Graphics.DrawEllipse(screenPos, new System.Numerics.Vector2(radius * 2, radius * 2), Settings.TargetMarkerColor.Value, Settings.PathLineWidth.Value);
                             
                             // Draw target cross
                             Graphics.DrawLine(
