@@ -20,6 +20,18 @@ using ImGuiNET;
 
 namespace AqueductBridge
 {
+    public struct PathPoint
+    {
+        public float X;
+        public float Y;
+        
+        public PathPoint(float x, float y)
+        {
+            X = x;
+            Y = y;
+        }
+    }
+
     public class AqueductBridgePlugin : BaseSettingsPlugin<AqueductBridgeSettings>
     {
         private HttpListener httpListener;
@@ -29,8 +41,8 @@ namespace AqueductBridge
         private string lastError = "";
         
         // Visual path data
-        private List<System.Numerics.Vector2> currentPath = new List<System.Numerics.Vector2>();
-        private System.Numerics.Vector2? targetPosition = null;
+        private List<PathPoint> currentPath = new List<PathPoint>();
+        private PathPoint? targetPosition = null;
         private DateTime lastPathUpdate = DateTime.MinValue;
         private readonly object pathLock = new object();
 
@@ -731,7 +743,7 @@ namespace AqueductBridge
                             {
                                 var x = Convert.ToSingle(waypoint["x"]);
                                 var y = Convert.ToSingle(waypoint["y"]);
-                                currentPath.Add(new System.Numerics.Vector2(x, y));
+                                currentPath.Add(new PathPoint(x, y));
                             }
                         }
                     }
@@ -740,7 +752,7 @@ namespace AqueductBridge
                     {
                         var x = Convert.ToSingle(target["x"]);
                         var y = Convert.ToSingle(target["y"]);
-                        targetPosition = new System.Numerics.Vector2(x, y);
+                        targetPosition = new PathPoint(x, y);
                     }
                     else
                     {
