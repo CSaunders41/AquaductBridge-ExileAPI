@@ -176,9 +176,51 @@ class LootManager:
     def _get_nearby_items(self) -> List[Item]:
         """Get items within pickup radius"""
         try:
-            # This would be implemented with actual API calls to get entities
-            # For now, return empty list as placeholder
-            return []
+            # Get entities from API
+            from api_client import AqueductAPIClient
+            
+            if not hasattr(self, '_api_client'):
+                self._api_client = AqueductAPIClient()
+            
+            entities = self._api_client.get_entities()
+            items = []
+            
+            for entity in entities:
+                # Check if it's an item (EntityType == 2 or other item types)
+                entity_type = entity.get('EntityType', 0)
+                path = entity.get('Path', '').lower()
+                
+                # Filter for items (currency, equipment, etc.)
+                if (entity_type == 2 or  # Items
+                    'currency' in path or 
+                    'divination' in path or
+                    'stackable' in path or
+                    'equipment' in path or
+                    'armour' in path or
+                    'weapon' in path or
+                    'jewelry' in path):
+                    
+                    try:
+                        # Create Item object
+                        item = Item(
+                            entity_id=entity.get('Id', 0),
+                            position=entity.get('GridPosition', {'X': 0, 'Y': 0, 'Z': 0}),
+                            screen_position=entity.get('location_on_screen', {'X': 0, 'Y': 0}),
+                            path=entity.get('Path', ''),
+                            distance=self._calculate_distance_to_player(entity),
+                            rarity=self._determine_item_rarity(entity),
+                            item_type=self._determine_item_type(entity)
+                        )
+                        
+                        # Only add if within pickup radius
+                        if item.distance <= self.config.pickup_radius:
+                            items.append(item)
+                            
+                    except Exception as e:
+                        self.logger.debug(f"Error creating item object: {e}")
+            
+            self.logger.debug(f"Found {len(items)} items in range")
+            return items
             
         except Exception as e:
             self.logger.error(f"Error getting nearby items: {e}")
@@ -416,9 +458,24 @@ class LootManager:
     def _get_stash_entities(self) -> List[Dict[str, Any]]:
         """Get stash entities"""
         try:
-            # This would be implemented with actual API calls
-            # For now, return empty list as placeholder
-            return []
+            if not hasattr(self, '_api_client'):
+                from api_client import AqueductAPIClient
+                self._api_client = AqueductAPIClient()
+            
+            entities = self._api_client.get_entities()
+            stash_entities = []
+            
+            for entity in entities:
+                path = entity.get('Path', '').lower()
+                
+                # Look for stash entities
+                if ('stash' in path or 
+                    'chest' in path or 
+                    'guildstash' in path):
+                    stash_entities.append(entity)
+            
+            self.logger.debug(f"Found {len(stash_entities)} stash entities")
+            return stash_entities
             
         except Exception as e:
             self.logger.error(f"Error getting stash entities: {e}")
@@ -482,13 +539,85 @@ class LootManager:
     
     def _get_player_position(self) -> Dict[str, int]:
         """Get current player position"""
-        # Placeholder - would be implemented with API call
-        return {'X': 0, 'Y': 0, 'Z': 0}
+        try:
+            if not hasattr(self, '_api_client'):
+                from api_client import AqueductAPIClient
+                self._api_client = AqueductAPIClient()
+            
+            return self._api_client.get_player_position()
+        except Exception as e:
+            self.logger.error(f"Error getting player position: {e}")
+            return {'X': 0, 'Y': 0, 'Z': 0}
     
     def _move_to_position(self, position: Dict[str, int]):
         """Move to a specific position"""
-        # Placeholder - would be implemented with API call
-        pass
+        try:
+            # This should be handled by the main automation system
+            # For now, we'll just log the intention
+            self.logger.debug(f"Loot manager requesting move to {position}")
+            # In a full implementation, this would call the main automation's move_to_position
+        except Exception as e:
+            self.logger.error(f"Error moving to position: {e}")
+    
+    def _calculate_distance_to_player(self, entity: Dict[str, Any]) -> float:
+        """Calculate distance from player to entity"""
+        try:
+            player_pos = self._get_player_position()
+            entity_pos = entity.get('GridPosition', {'X': 0, 'Y': 0, 'Z': 0})
+            
+            dx = player_pos['X'] - entity_pos['X']
+            dy = player_pos['Y'] - entity_pos['Y']
+            
+            return (dx * dx + dy * dy) ** 0.5
+        except Exception as e:
+            self.logger.debug(f"Error calculating distance: {e}")
+            return 999.0
+    
+    def _determine_item_rarity(self, entity: Dict[str, Any]) -> str:
+        """Determine item rarity from entity data"""
+        try:
+            path = entity.get('Path', '').lower()
+            
+            if 'unique' in path:
+                return 'unique'
+            elif 'rare' in path:
+                return 'rare'
+            elif 'magic' in path:
+                return 'magic'
+            elif 'currency' in path:
+                return 'currency'
+            elif 'divination' in path:
+                return 'divination'
+            else:
+                return 'normal'
+        except Exception as e:
+            self.logger.debug(f"Error determining item rarity: {e}")
+            return 'normal'
+    
+    def _determine_item_type(self, entity: Dict[str, Any]) -> str:
+        """Determine item type from entity data"""
+        try:
+            path = entity.get('Path', '').lower()
+            
+            if 'currency' in path:
+                return 'currency'
+            elif 'divination' in path:
+                return 'divination_card'
+            elif 'weapon' in path:
+                return 'weapon'
+            elif 'armour' in path or 'armor' in path:
+                return 'armor'
+            elif 'jewelry' in path or 'ring' in path or 'amulet' in path:
+                return 'jewelry'
+            elif 'flask' in path:
+                return 'flask'
+            elif 'gem' in path:
+                return 'gem'
+            else:
+                return 'other'
+        except Exception as e:
+            self.logger.debug(f"Error determining item type: {e}")
+            return 'other'
     
     def _click_position(self, x: int, y: int):
         """Click at screen position"""

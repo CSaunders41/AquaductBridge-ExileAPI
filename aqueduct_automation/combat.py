@@ -100,13 +100,7 @@ class CombatSystem:
     def scan_for_enemies(self) -> bool:
         """Scan for nearby enemies and return if any found"""
         try:
-            from api_client import AqueductAPIClient
-            
-            # This would be passed in from the main automation system
-            # For now, we'll simulate the API call
-            # In practice, this would be injected as a dependency
-            
-            # Placeholder - in real implementation, this would get entities from API
+            # Get nearby monsters using the now-implemented method
             monsters = self._get_nearby_monsters()
             
             if not monsters:
@@ -182,9 +176,41 @@ class CombatSystem:
     def _get_nearby_monsters(self) -> List[Monster]:
         """Get monsters within engagement range"""
         try:
-            # This would be implemented with actual API calls
-            # For now, return empty list as placeholder
-            return []
+            # Get entities from API
+            from api_client import AqueductAPIClient
+            
+            if not hasattr(self, '_api_client'):
+                self._api_client = AqueductAPIClient()
+            
+            entities = self._api_client.get_entities()
+            monsters = []
+            
+            for entity in entities:
+                # Check if it's a monster (EntityType == 14)
+                if entity.get('EntityType') == 14:
+                    # Check if it's alive
+                    if entity.get('IsAlive', True):
+                        try:
+                            # Create Monster object
+                            monster = Monster(
+                                entity_id=entity.get('Id', 0),
+                                position=entity.get('GridPosition', {'X': 0, 'Y': 0, 'Z': 0}),
+                                screen_position=entity.get('location_on_screen', {'X': 0, 'Y': 0}),
+                                path=entity.get('Path', ''),
+                                health_percentage=self._get_monster_health_percentage(entity),
+                                distance=self._calculate_distance_to_player(entity),
+                                threat_level=self._calculate_threat_level(entity)
+                            )
+                            
+                            # Only add if within engagement range
+                            if monster.distance <= self.config.max_engagement_range:
+                                monsters.append(monster)
+                                
+                        except Exception as e:
+                            self.logger.debug(f"Error creating monster object: {e}")
+            
+            self.logger.debug(f"Found {len(monsters)} monsters in range")
+            return monsters
             
         except Exception as e:
             self.logger.error(f"Error getting nearby monsters: {e}")
@@ -384,18 +410,82 @@ class CombatSystem:
     
     def _get_player_position(self) -> Dict[str, int]:
         """Get current player position"""
-        # Placeholder - would be implemented with API call
-        return {'X': 0, 'Y': 0, 'Z': 0}
+        try:
+            if not hasattr(self, '_api_client'):
+                self._api_client = AqueductAPIClient()
+            
+            return self._api_client.get_player_position()
+        except Exception as e:
+            self.logger.error(f"Error getting player position: {e}")
+            return {'X': 0, 'Y': 0, 'Z': 0}
     
     def _get_player_health_percentage(self) -> float:
         """Get current player health percentage"""
-        # Placeholder - would be implemented with API call
-        return 100.0
+        try:
+            if not hasattr(self, '_api_client'):
+                self._api_client = AqueductAPIClient()
+            
+            return self._api_client.get_health_percentage()
+        except Exception as e:
+            self.logger.error(f"Error getting player health: {e}")
+            return 100.0
     
     def _move_to_position(self, position: Dict[str, int]):
         """Move to a specific position"""
-        # Placeholder - would be implemented with API call
-        pass
+        try:
+            # This should be handled by the main automation system
+            # For now, we'll just log the intention
+            self.logger.debug(f"Combat system requesting move to {position}")
+            # In a full implementation, this would call the main automation's move_to_position
+        except Exception as e:
+            self.logger.error(f"Error moving to position: {e}")
+    
+    def _get_monster_health_percentage(self, entity: Dict[str, Any]) -> float:
+        """Get monster health percentage from entity data"""
+        try:
+            life_data = entity.get('life', {})
+            if life_data:
+                health = life_data.get('Health', {})
+                current = health.get('Current', 100)
+                total = health.get('Total', 100)
+                return (current / total * 100) if total > 0 else 0
+            return 100.0  # Assume full health if no data
+        except Exception as e:
+            self.logger.debug(f"Error getting monster health: {e}")
+            return 100.0
+    
+    def _calculate_distance_to_player(self, entity: Dict[str, Any]) -> float:
+        """Calculate distance from player to entity"""
+        try:
+            player_pos = self._get_player_position()
+            entity_pos = entity.get('GridPosition', {'X': 0, 'Y': 0, 'Z': 0})
+            
+            dx = player_pos['X'] - entity_pos['X']
+            dy = player_pos['Y'] - entity_pos['Y']
+            
+            return (dx * dx + dy * dy) ** 0.5
+        except Exception as e:
+            self.logger.debug(f"Error calculating distance: {e}")
+            return 999.0  # Return large distance on error
+    
+    def _calculate_threat_level(self, entity: Dict[str, Any]) -> float:
+        """Calculate threat level of entity"""
+        try:
+            # Base threat level
+            threat = 1.0
+            
+            # Increase threat based on entity type/path
+            path = entity.get('Path', '').lower()
+            if 'rare' in path or 'unique' in path:
+                threat *= 2.0
+            elif 'magic' in path:
+                threat *= 1.5
+            
+            # Could add more threat calculations based on entity properties
+            return threat
+        except Exception as e:
+            self.logger.debug(f"Error calculating threat level: {e}")
+            return 1.0
     
     def _click_position(self, x: int, y: int):
         """Click at screen position"""
