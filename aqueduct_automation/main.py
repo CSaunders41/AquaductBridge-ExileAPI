@@ -250,6 +250,11 @@ class AqueductAutomation:
             # Get current position
             current_pos = self.api_client.get_player_position()
             
+            if self.debug_mode:
+                self.logger.info(f"=== Movement Debug ===")
+                self.logger.info(f"Current position: {current_pos}")
+                self.logger.info(f"Target position: {target_pos}")
+            
             # Use coordinate fix instead of broken API
             screen_coords = self.coordinate_fix.get_movement_position(
                 target_pos['x'], target_pos['y']
@@ -262,7 +267,12 @@ class AqueductAutomation:
                 self.logger.info(f"Using safe click position: {screen_coords}")
             
             # Debug coordinate information
-            self.logger.debug(f"Moving to world pos {target_pos} -> screen pos {screen_coords}")
+            self.logger.info(f"Moving to world pos {target_pos} -> screen pos {screen_coords}")
+            
+            # In safe mode, don't actually click
+            if self.safe_mode:
+                self.logger.info(f"SAFE MODE: Would click at {screen_coords}")
+                return
             
             # Click to move
             success = self.api_client.click_position(screen_coords[0], screen_coords[1])

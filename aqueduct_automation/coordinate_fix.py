@@ -34,9 +34,15 @@ class CoordinateFix:
         """Convert grid coordinates to screen coordinates"""
         try:
             if not self.game_window:
-                # Default fallback
-                screen_x = grid_x + 500  # Rough offset
-                screen_y = grid_y + 300
+                # Default fallback - use screen center with small offset
+                center_x, center_y = 960, 540
+                offset_x = (grid_x - 500) * 0.5  # Much smaller scaling
+                offset_y = (grid_y - 300) * 0.5
+                screen_x = int(center_x + offset_x)
+                screen_y = int(center_y + offset_y)
+                # Ensure within bounds
+                screen_x = max(100, min(screen_x, 1820))
+                screen_y = max(100, min(screen_y, 980))
                 return (screen_x, screen_y)
             
             # Get window center
@@ -45,26 +51,39 @@ class CoordinateFix:
             center_x = window_width // 2
             center_y = window_height // 2
             
-            # Convert grid to screen relative to center
-            # This is a rough approximation - may need tweaking
-            screen_x = center_x + (grid_x - 500) * 2  # Assuming 500 is roughly center
-            screen_y = center_y + (grid_y - 300) * 2  # Assuming 300 is roughly center
+            # Estimate player position based on typical grid coordinates
+            # Grid coordinates seem to be around 500x300 area
+            player_grid_x = 500  # Rough estimate
+            player_grid_y = 300  # Rough estimate
             
-            # Ensure coordinates are within window bounds
-            screen_x = max(50, min(screen_x, window_width - 50))
-            screen_y = max(50, min(screen_y, window_height - 50))
+            # Convert grid to screen with much smaller scaling
+            # Use a scaling factor that keeps coordinates reasonable
+            scale_factor = 0.3  # Much smaller scale
+            
+            offset_x = (grid_x - player_grid_x) * scale_factor
+            offset_y = (grid_y - player_grid_y) * scale_factor
+            
+            screen_x = int(center_x + offset_x)
+            screen_y = int(center_y + offset_y)
+            
+            # Ensure coordinates are within window bounds with margin
+            margin = 100
+            screen_x = max(margin, min(screen_x, window_width - margin))
+            screen_y = max(margin, min(screen_y, window_height - margin))
+            
+            self.logger.debug(f"Grid ({grid_x}, {grid_y}) -> Screen ({screen_x}, {screen_y}) [scale: {scale_factor}]")
             
             return (screen_x, screen_y)
             
         except Exception as e:
             self.logger.error(f"Error converting grid coordinates ({grid_x}, {grid_y}): {e}")
             # Return safe fallback
-            return (960, 540)  # Screen center
+            return self.get_screen_center()
     
     def get_entity_click_position(self, entity: Dict[str, Any]) -> Optional[Tuple[int, int]]:
         """Get safe click position for an entity using grid coordinates"""
         try:
-            # Try grid position first (this seems to work)
+            # ALWAYS use grid position first - ignore broken screen coordinates
             grid_pos = entity.get('GridPosition', {})
             if grid_pos:
                 grid_x = grid_pos.get('X', 0)
@@ -72,35 +91,26 @@ class CoordinateFix:
                 
                 self.logger.debug(f"Entity grid position: ({grid_x}, {grid_y})")
                 
-                # Convert to screen coordinates
+                # Convert to screen coordinates using our fixed conversion
                 screen_x, screen_y = self.convert_grid_to_screen(grid_x, grid_y)
                 
                 # Validate
                 if self.is_valid_screen_position(screen_x, screen_y):
+                    self.logger.debug(f"Converted grid ({grid_x}, {grid_y}) -> screen ({screen_x}, {screen_y})")
                     return (screen_x, screen_y)
                 else:
                     self.logger.warning(f"Invalid converted screen position: ({screen_x}, {screen_y})")
-                    return None
+                    # Return screen center as fallback
+                    return self.get_screen_center()
             
-            # If no grid position, try screen position but validate heavily
-            screen_pos = entity.get('location_on_screen', {})
-            if screen_pos:
-                x = screen_pos.get('X', 0)
-                y = screen_pos.get('Y', 0)
-                
-                # Only use if coordinates are reasonable
-                if self.is_valid_screen_position(x, y):
-                    return (x, y)
-                else:
-                    self.logger.warning(f"Invalid entity screen position: ({x}, {y})")
-                    return None
-            
-            self.logger.warning("No valid position data found in entity")
-            return None
+            # If no grid position, DO NOT use screen position - it's broken
+            # Instead, return screen center as safe fallback
+            self.logger.warning("No grid position found in entity, using screen center")
+            return self.get_screen_center()
             
         except Exception as e:
             self.logger.error(f"Error getting entity click position: {e}")
-            return None
+            return self.get_screen_center()
     
     def get_movement_position(self, world_x: int, world_y: int) -> Optional[Tuple[int, int]]:
         """Get movement position using grid coordinates instead of broken API"""

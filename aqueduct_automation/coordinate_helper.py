@@ -173,27 +173,29 @@ class CoordinateHelper:
         """Debug coordinate information for an entity"""
         self.logger.info(f"=== Entity Coordinate Debug ===")
         
-        # Screen position
-        screen_pos = entity.get('location_on_screen', {})
-        if screen_pos:
-            self.logger.info(f"Screen position: {screen_pos}")
-        
-        # Grid position
+        # Grid position (the good data)
         grid_pos = entity.get('GridPosition', {})
         if grid_pos:
             self.logger.info(f"Grid position: {grid_pos}")
+        
+        # Screen position (the broken data - for comparison)
+        screen_pos = entity.get('location_on_screen', {})
+        if screen_pos:
+            self.logger.info(f"Screen position (BROKEN): {screen_pos}")
         
         # Entity type and path
         self.logger.info(f"Entity type: {entity.get('EntityType', 'Unknown')}")
         self.logger.info(f"Entity path: {entity.get('Path', 'Unknown')}")
         
-        # Try coordinate conversion
-        if screen_pos:
-            x, y = screen_pos.get('X', 0), screen_pos.get('Y', 0)
-            converted = self.convert_game_to_screen(x, y)
-            self.logger.info(f"Converted coordinates: {converted}")
-            self.logger.info(f"Coordinates valid: {self.validate_screen_coordinates(*converted)}")
-            self.logger.info(f"Position on screen: {self.is_position_on_screen(*converted)}")
+        # Try coordinate fix conversion using grid coordinates
+        if grid_pos:
+            from coordinate_fix import get_coordinate_fix
+            coord_fix = get_coordinate_fix()
+            fixed_coords = coord_fix.get_entity_click_position(entity)
+            self.logger.info(f"Fixed coordinates: {fixed_coords}")
+            if fixed_coords:
+                self.logger.info(f"Fixed coordinates valid: {self.validate_screen_coordinates(*fixed_coords)}")
+                self.logger.info(f"Fixed position on screen: {self.is_position_on_screen(*fixed_coords)}")
         
         self.logger.info(f"=== End Debug ===")
 
