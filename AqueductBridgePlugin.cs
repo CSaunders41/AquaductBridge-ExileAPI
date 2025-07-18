@@ -242,7 +242,7 @@ namespace AqueductBridge
                 { 
                     current = life?.CurMana ?? 0, 
                     max = life?.MaxMana ?? 0, 
-                    percentage = life?.ManaPercentage ?? 0 
+                    percentage = (life?.MaxMana ?? 0) > 0 ? (life?.CurMana ?? 0) * 100 / (life?.MaxMana ?? 0) : 0 
                 }
             };
         }
@@ -255,7 +255,7 @@ namespace AqueductBridge
             return new
             {
                 area_name = GameController.Area.CurrentArea?.Name ?? "Unknown",
-                area_id = GameController.Area.CurrentArea?.Id ?? "Unknown",
+                area_id = GameController.Game?.IngameState?.Data?.CurrentAreaHash?.ToString() ?? "Unknown",
                 is_loading = GameController.IsLoading
             };
         }
