@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using ExileCore;
-using ExileCore.Shared.Attributes;
 using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
 using ImGuiNET;
@@ -13,10 +12,6 @@ using System.Threading;
 
 namespace AqueductBridge
 {
-    [PluginName("AqueductBridge")]
-    [PluginDescription("HTTP Bridge for aqueduct_runner compatibility")]
-    [PluginVersion("1.0.0")]
-    [PluginAuthor("AqueductBridge")]
     public class AqueductBridgePlugin : BaseSettingsPlugin<AqueductBridgeSettings>
     {
         private HttpListener _httpListener;
@@ -28,19 +23,19 @@ namespace AqueductBridge
         {
             try
             {
-                LogMessage("AqueductBridge plugin initializing...");
+                DebugWindow.LogMsg("AqueductBridge plugin initializing...");
                 
                 if (Settings.AutoStartServer.Value)
                 {
                     StartHttpServer();
                 }
 
-                LogMessage("AqueductBridge plugin initialized successfully");
+                DebugWindow.LogMsg("AqueductBridge plugin initialized successfully");
                 return true;
             }
             catch (Exception ex)
             {
-                LogError($"Failed to initialize AqueductBridge: {ex.Message}");
+                DebugWindow.LogError($"Failed to initialize AqueductBridge: {ex.Message}");
                 return false;
             }
         }
@@ -82,11 +77,11 @@ namespace AqueductBridge
                 _cancellationTokenSource = new CancellationTokenSource();
                 _serverTask = Task.Run(() => RunHttpServer(_cancellationTokenSource.Token));
                 _isServerRunning = true;
-                LogMessage($"HTTP Server started on port {Settings.HttpServerPort.Value}");
+                DebugWindow.LogMsg($"HTTP Server started on port {Settings.HttpServerPort.Value}");
             }
             catch (Exception ex)
             {
-                LogError($"Failed to start HTTP server: {ex.Message}");
+                DebugWindow.LogError($"Failed to start HTTP server: {ex.Message}");
             }
         }
 
@@ -100,11 +95,11 @@ namespace AqueductBridge
                 _httpListener?.Stop();
                 _httpListener?.Close();
                 _isServerRunning = false;
-                LogMessage("HTTP Server stopped");
+                DebugWindow.LogMsg("HTTP Server stopped");
             }
             catch (Exception ex)
             {
-                LogError($"Error stopping HTTP server: {ex.Message}");
+                DebugWindow.LogError($"Error stopping HTTP server: {ex.Message}");
             }
         }
 
@@ -130,13 +125,13 @@ namespace AqueductBridge
                     }
                     catch (Exception ex)
                     {
-                        LogError($"Error accepting HTTP request: {ex.Message}");
+                        DebugWindow.LogError($"Error accepting HTTP request: {ex.Message}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                LogError($"HTTP server error: {ex.Message}");
+                DebugWindow.LogError($"HTTP server error: {ex.Message}");
             }
             finally
             {
@@ -178,7 +173,7 @@ namespace AqueductBridge
             }
             catch (Exception ex)
             {
-                LogError($"Error processing request: {ex.Message}");
+                DebugWindow.LogError($"Error processing request: {ex.Message}");
                 try
                 {
                     context.Response.StatusCode = 500;
@@ -206,7 +201,7 @@ namespace AqueductBridge
             }
             catch (Exception ex)
             {
-                LogError($"Error getting game data: {ex.Message}");
+                DebugWindow.LogError($"Error getting game data: {ex.Message}");
                 return new { error = ex.Message };
             }
         }
@@ -268,19 +263,6 @@ namespace AqueductBridge
         public override void OnClose()
         {
             StopHttpServer();
-        }
-
-        private void LogMessage(string message)
-        {
-            if (Settings.EnableDebugLogging.Value)
-            {
-                DebugWindow.LogMsg($"[AqueductBridge] {message}");
-            }
-        }
-
-        private void LogError(string message)
-        {
-            DebugWindow.LogError($"[AqueductBridge] {message}");
         }
     }
 } 
