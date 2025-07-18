@@ -22,11 +22,11 @@ class ResourceConfig:
     """Configuration for resource management"""
     # Health management
     health_flask_threshold: float = 75.0     # Use health flask below this %
-    critical_health_threshold: float = 30.0  # Emergency threshold
+    critical_health_threshold: float = 15.0  # Emergency threshold - lowered from 30%
     
     # Mana management
     mana_flask_threshold: float = 50.0       # Use mana flask below this %
-    critical_mana_threshold: float = 20.0    # Emergency threshold
+    critical_mana_threshold: float = 10.0    # Emergency threshold - lowered from 20%
     
     # Energy shield management
     es_flask_threshold: float = 50.0         # Use ES flask below this %
@@ -42,9 +42,9 @@ class ResourceConfig:
     utility_flask_keys: List[str] = None
     
     # Retreat settings
-    retreat_health_threshold: float = 25.0   # Retreat if health below this %
-    retreat_es_threshold: float = 20.0       # Retreat if ES below this %
-    panic_mode_threshold: float = 15.0       # Panic mode threshold
+    retreat_health_threshold: float = 10.0   # Retreat if health below this % - lowered from 25%
+    retreat_es_threshold: float = 10.0       # Retreat if ES below this % - lowered from 20%
+    panic_mode_threshold: float = 5.0        # Panic mode threshold - lowered from 15%
     
     # Monitoring settings
     check_frequency: float = 0.5             # How often to check resources (seconds)
@@ -114,6 +114,10 @@ class ResourceManager:
             # Update resource status
             self.update_resource_status()
             
+            # Debug: Log current resource status
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.log_resource_status()
+            
             # Check if we need to use flasks
             flasks_used = False
             
@@ -147,6 +151,10 @@ class ResourceManager:
             if self.current_status.should_retreat(self.config):
                 self.retreat_requested = True
                 self.logger.warning("Retreat requested due to low resources")
+                # Log the actual values causing the retreat
+                self.logger.warning(f"Retreat triggered - Health: {self.current_status.health_percentage:.1f}%, "
+                                  f"Mana: {self.current_status.mana_percentage:.1f}%, "
+                                  f"ES: {self.current_status.es_percentage:.1f}%")
             
             return flasks_used
             
@@ -399,8 +407,26 @@ class ResourceManager:
     
     def _get_life_data(self) -> Dict[str, Any]:
         """Get life data from API"""
-        # Placeholder - would be implemented with actual API call
-        return {}
+        try:
+            from api_client import AqueductAPIClient
+            
+            # Get or create API client instance
+            if not hasattr(self, '_api_client'):
+                self._api_client = AqueductAPIClient()
+            
+            # Get life data from the API
+            life_data = self._api_client.get_life_data()
+            
+            if life_data:
+                self.logger.debug(f"Retrieved life data: {life_data}")
+                return life_data
+            else:
+                self.logger.warning("No life data received from API")
+                return {}
+                
+        except Exception as e:
+            self.logger.error(f"Error getting life data from API: {e}")
+            return {}
     
     def _send_key(self, key: str):
         """Send key press"""
@@ -449,6 +475,19 @@ def create_resource_config(build_type: str = "default") -> ResourceConfig:
             es_flask_threshold=80.0,
             critical_health_threshold=15.0,
             retreat_health_threshold=10.0,  # Very low retreat threshold
+            life_flask_key="1",
+            mana_flask_key="2",
+            utility_flask_keys=["3", "4", "5"]
+        ),
+        "safe_mode": ResourceConfig(
+            health_flask_threshold=90.0,  # Very safe - use flasks early
+            mana_flask_threshold=80.0,
+            es_flask_threshold=90.0,
+            critical_health_threshold=5.0,   # Very low threshold
+            critical_mana_threshold=5.0,     # Very low threshold
+            retreat_health_threshold=3.0,    # Only retreat if almost dead
+            retreat_es_threshold=3.0,        # Only retreat if almost dead
+            panic_mode_threshold=2.0,        # Only panic if nearly dead
             life_flask_key="1",
             mana_flask_key="2",
             utility_flask_keys=["3", "4", "5"]
