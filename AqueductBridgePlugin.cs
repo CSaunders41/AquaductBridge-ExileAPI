@@ -255,7 +255,7 @@ namespace AqueductBridge
             return new
             {
                 area_name = GameController.Area.CurrentArea?.Name ?? "Unknown",
-                area_id = GameController.Game?.IngameState?.Data?.CurrentAreaHash?.ToString() ?? "Unknown",
+                area_id = GameController.Game?.IngameState?.Data?.CurrentAreaHash.ToString() ?? "Unknown",
                 is_loading = GameController.IsLoading
             };
         }
