@@ -629,7 +629,7 @@ namespace AqueductBridge
                         if (currentPath.Count > 0)
                         {
                             var firstWaypoint = currentPath[0];
-                            var firstScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
+                            var firstScreenPos = camera.WorldToScreen(new SharpDX.Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
                             
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
@@ -648,8 +648,8 @@ namespace AqueductBridge
                             var fromPos = currentPath[i];
                             var toPos = currentPath[i + 1];
                             
-                            var fromScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(fromPos.X, fromPos.Y, 0f));
-                            var toScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(toPos.X, toPos.Y, 0f));
+                            var fromScreenPos = camera.WorldToScreen(new SharpDX.Vector3(fromPos.X, fromPos.Y, 0f));
+                            var toScreenPos = camera.WorldToScreen(new SharpDX.Vector3(toPos.X, toPos.Y, 0f));
                             
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
@@ -667,7 +667,7 @@ namespace AqueductBridge
                     if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
                     {
                         var camera = GameController.IngameState.Camera;
-                        var targetScreenPos = camera.WorldToScreen(new System.Numerics.Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
+                        var targetScreenPos = camera.WorldToScreen(new SharpDX.Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
