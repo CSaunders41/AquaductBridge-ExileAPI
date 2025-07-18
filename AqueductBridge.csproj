@@ -10,13 +10,29 @@
     <EmbedAllSources>true</EmbedAllSources>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- Multiple fallback strategies for finding ExileCore assemblies -->
+    <ExileCorePath Condition="'$(exapiPackage)' != '' AND Exists('$(exapiPackage)\ExileCore.dll')">$(exapiPackage)</ExileCorePath>
+    <ExileCorePath Condition="'$(ExileCorePath)' == '' AND Exists('$(MSBuildProjectDirectory)\..\..\..\ExileCore.dll')">$(MSBuildProjectDirectory)\..\..\..</ExileCorePath>
+    <ExileCorePath Condition="'$(ExileCorePath)' == '' AND Exists('$(MSBuildProjectDirectory)\..\..\ExileCore.dll')">$(MSBuildProjectDirectory)\..\..\..</ExileCorePath>
+    <ExileCorePath Condition="'$(ExileCorePath)' == '' AND Exists('$(MSBuildProjectDirectory)\..\..\..\..\ExileCore.dll')">$(MSBuildProjectDirectory)\..\..\..</ExileCorePath>
+    <ExileCorePath Condition="'$(ExileCorePath)' == ''">..\..\..</ExileCorePath>
+  </PropertyGroup>
+
+  <Target Name="ValidateExileCorePath" BeforeTargets="BeforeBuild">
+    <Message Text="ExileCorePath resolved to: $(ExileCorePath)" Importance="high" />
+    <Message Text="Looking for ExileCore.dll at: $(ExileCorePath)\ExileCore.dll" Importance="high" />
+    <Error Text="ExileCore.dll not found at $(ExileCorePath)\ExileCore.dll. Please ensure the plugin is in the correct directory structure." 
+           Condition="!Exists('$(ExileCorePath)\ExileCore.dll')" />
+  </Target>
+
   <ItemGroup>
     <Reference Include="ExileCore">
-      <HintPath>$(exapiPackage)\ExileCore.dll</HintPath>
+      <HintPath>$(ExileCorePath)\ExileCore.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="GameOffsets">
-      <HintPath>$(exapiPackage)\GameOffsets.dll</HintPath>
+      <HintPath>$(ExileCorePath)\GameOffsets.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>
