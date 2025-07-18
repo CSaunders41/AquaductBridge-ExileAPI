@@ -144,6 +144,19 @@ class CoordinateFix:
         
         return x <= width - 10 and y <= height - 10
     
+    def get_screen_center(self) -> Tuple[int, int]:
+        """Get center of screen/game window"""
+        if not self.game_window:
+            return (960, 540)
+        
+        window_width = self.game_window.get('Width', 1920)
+        window_height = self.game_window.get('Height', 1080)
+        
+        center_x = int(window_width // 2)
+        center_y = int(window_height // 2)
+        
+        return (center_x, center_y)
+    
     def get_safe_click_near_player(self, player_pos: Dict[str, Any]) -> Tuple[int, int]:
         """Get a safe click position near the player"""
         try:
