@@ -18,6 +18,7 @@ using ExileCore.Shared.Enums;
 using SharpDX;
 using ExileCore.PoEMemory;
 using GameOffsets.Native;
+using System.Reflection;
 
 namespace AqueductBridge
 {
@@ -354,6 +355,24 @@ namespace AqueductBridge
         {
             try
             {
+                // Debug: Let's see what TerrainData properties are available
+                var terrain = GameController?.IngameState?.Data?.Terrain;
+                if (terrain != null)
+                {
+                    DebugWindow.LogMsg("TerrainData object found, investigating properties...");
+                    var terrainType = terrain.GetType();
+                    var properties = terrainType.GetProperties();
+                    DebugWindow.LogMsg($"TerrainData properties ({properties.Length} total):");
+                    foreach (var prop in properties)
+                    {
+                        DebugWindow.LogMsg($"  - {prop.Name}: {prop.PropertyType.Name}");
+                    }
+                }
+                else
+                {
+                    DebugWindow.LogMsg("TerrainData is null");
+                }
+                
                 // Temporary fallback - return a simple terrain string to get the plugin working
                 // TODO: Fix terrain data access once we understand the correct TerrainData properties
                 DebugWindow.LogMsg("GetTerrainString: Using fallback terrain data");
