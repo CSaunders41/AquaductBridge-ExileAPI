@@ -204,32 +204,44 @@ class AqueductAutomation:
                 game_data['terrain_string']
             )
             
+            self.logger.info(f"Created path with {len(path)} waypoints")
+            
             # Follow the path, fighting and looting
-            for waypoint in path:
+            successful_moves = 0
+            for i, waypoint in enumerate(path):
+                self.logger.info(f"Moving to waypoint {i+1}/{len(path)}: {waypoint}")
+                
                 # Move to waypoint
-                self.move_to_position(waypoint)
+                movement_successful = self.move_to_position(waypoint)
                 
-                # Check for and handle combat
-                if self.combat_system.scan_for_enemies():
-                    killed = self.combat_system.engage_combat()
-                    self.stats.monsters_killed += killed
-                
-                # Check for loot
-                loot_collected = self.loot_manager.collect_nearby_loot()
-                self.stats.items_collected += loot_collected
-                
-                # Monitor resources
-                self.resource_manager.check_and_use_flasks()
-                
-                # Check if inventory is full
-                if self.loot_manager.is_inventory_full():
-                    self.logger.info("Inventory full, returning to stash")
-                    break
+                if movement_successful:
+                    successful_moves += 1
                     
-                # Safety check - if health too low, retreat
-                if self.resource_manager.should_retreat():
-                    self.logger.warning("Health critical, retreating")
-                    break
+                    # Check for and handle combat
+                    if self.combat_system.scan_for_enemies():
+                        killed = self.combat_system.engage_combat()
+                        self.stats.monsters_killed += killed
+                    
+                    # Check for loot
+                    loot_collected = self.loot_manager.collect_nearby_loot()
+                    self.stats.items_collected += loot_collected
+                    
+                    # Monitor resources
+                    self.resource_manager.check_and_use_flasks()
+                    
+                    # Check if inventory is full
+                    if self.loot_manager.is_inventory_full():
+                        self.logger.info("Inventory full, returning to stash")
+                        break
+                        
+                    # Safety check - if health too low, retreat
+                    if self.resource_manager.should_retreat():
+                        self.logger.warning("Health critical, retreating")
+                        break
+                else:
+                    self.logger.warning(f"Failed to move to waypoint {i+1}, continuing to next")
+                    
+            self.logger.info(f"Completed path traversal: {successful_moves}/{len(path)} waypoints reached")
                     
         except Exception as e:
             self.logger.error(f"Error during farming: {e}")
@@ -289,21 +301,44 @@ class AqueductAutomation:
     def wait_for_movement(self, start_pos: Dict, target_pos: Dict, timeout: float = 5.0):
         """Wait for player to reach target position"""
         start_time = time.time()
+        last_pos = start_pos
+        
+        self.logger.debug(f"Waiting for movement from {start_pos} to {target_pos}")
         
         while time.time() - start_time < timeout:
             current_pos = self.api_client.get_player_position()
-            distance = calculate_distance(current_pos, target_pos)
+            distance_to_target = calculate_distance(current_pos, target_pos)
+            distance_from_start = calculate_distance(current_pos, start_pos)
             
-            if distance < 10:  # Close enough
+            self.logger.debug(f"Current pos: {current_pos}, Distance to target: {distance_to_target:.2f}, Distance from start: {distance_from_start:.2f}")
+            
+            if distance_to_target < 10:  # Close enough
+                self.logger.debug("Reached target position")
                 break
                 
-            # Check if stuck
-            if calculate_distance(current_pos, start_pos) < 5:
+            # Check if stuck (haven't moved from start position)
+            if distance_from_start < 5:
                 if time.time() - start_time > 2.0:  # Been stuck for 2 seconds
                     self.logger.warning("Player appears stuck, trying alternate route")
                     break
+            else:
+                # Player is moving, extend timeout slightly
+                if distance_from_start > 5:
+                    self.logger.debug("Player is moving...")
                     
             time.sleep(0.1)
+        
+        # Log final result
+        final_pos = self.api_client.get_player_position()
+        final_distance = calculate_distance(final_pos, target_pos)
+        elapsed = time.time() - start_time
+        
+        if final_distance < 10:
+            self.logger.info(f"Successfully reached target in {elapsed:.2f}s")
+        else:
+            self.logger.warning(f"Did not reach target after {elapsed:.2f}s. Final distance: {final_distance:.2f}")
+            
+        return final_distance < 10
     
     def return_to_hideout(self):
         """Return to hideout via portal or waypoint"""

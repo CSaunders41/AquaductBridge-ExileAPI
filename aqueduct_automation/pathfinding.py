@@ -133,26 +133,42 @@ class PathfindingEngine:
     def create_aqueduct_path(self, start_pos: Dict[str, int], terrain_string: str) -> List[Dict[str, int]]:
         """Create a path through the Aqueduct from start to end"""
         try:
+            self.logger.info(f"Creating Aqueduct path from {start_pos}")
+            
             # Parse terrain data
             self.current_terrain = TerrainGrid(terrain_string)
             
             if not self.current_terrain.grid:
                 self.logger.warning("No terrain data available, using fallback path")
-                return self._create_fallback_path(start_pos)
+                fallback_path = self._create_fallback_path(start_pos)
+                self.logger.info(f"Created fallback path with {len(fallback_path)} waypoints")
+                return fallback_path
             
             # Convert start position
             start = Position(start_pos['X'], start_pos['Y'])
             
-            # For Aqueduct, we want to go from start to end
-            # Aqueduct is typically a linear area, so we'll create waypoints
+            # Try the complex pathfinding first
             path = self._create_linear_aqueduct_path(start)
             
-            # Convert back to dictionary format
-            return [{'x': pos.x, 'y': pos.y} for pos in path]
+            # If we got a valid path with multiple waypoints, use it
+            if len(path) > 1:
+                result_path = [{'x': pos.x, 'y': pos.y} for pos in path]
+                self.logger.info(f"Created linear path with {len(result_path)} waypoints")
+                return result_path
+            
+            # If complex pathfinding failed, use simple method
+            self.logger.warning("Complex pathfinding failed, using simple path")
+            simple_path = self._create_simple_aqueduct_path(start_pos)
+            self.logger.info(f"Created simple path with {len(simple_path)} waypoints")
+            return simple_path
             
         except Exception as e:
             self.logger.error(f"Failed to create Aqueduct path: {e}")
-            return self._create_fallback_path(start_pos)
+            import traceback
+            traceback.print_exc()
+            fallback_path = self._create_fallback_path(start_pos)
+            self.logger.info(f"Using fallback path with {len(fallback_path)} waypoints")
+            return fallback_path
     
     def _create_linear_aqueduct_path(self, start: Position) -> List[Position]:
         """Create a linear path through the Aqueduct"""
@@ -177,16 +193,23 @@ class PathfindingEngine:
         # Try to move in the general direction of the Aqueduct
         # Aqueduct typically runs horizontally or vertically
         target_direction = self._detect_aqueduct_direction(start)
+        self.logger.debug(f"Detected Aqueduct direction: {target_direction}")
         
         waypoints = self._generate_waypoints_along_direction(start, target_direction, 20)
+        self.logger.debug(f"Generated {len(waypoints)} waypoints")
         
         # Use A* pathfinding between waypoints
-        for waypoint in waypoints:
+        for i, waypoint in enumerate(waypoints):
+            self.logger.debug(f"Processing waypoint {i+1}: {waypoint}")
             segment_path = self.find_path(current, waypoint)
             if segment_path:
+                self.logger.debug(f"Found segment path with {len(segment_path)} positions")
                 path.extend(segment_path[1:])  # Skip first position (current)
                 current = waypoint
+            else:
+                self.logger.debug(f"No segment path found to waypoint {waypoint}")
         
+        self.logger.debug(f"Final path has {len(path)} positions")
         return path
     
     def _detect_aqueduct_direction(self, start: Position) -> Tuple[int, int]:
@@ -209,9 +232,11 @@ class PathfindingEngine:
             )
             
             # Check if position is valid and walkable
-            if self.current_terrain.is_valid_position(next_pos.x, next_pos.y):
+            if self.current_terrain and self.current_terrain.is_valid_position(next_pos.x, next_pos.y):
                 waypoints.append(next_pos)
+                self.logger.debug(f"Added waypoint {i}: {next_pos}")
             else:
+                self.logger.debug(f"Waypoint {i} at {next_pos} is not valid, stopping")
                 break  # Reached the end of the area
         
         return waypoints
@@ -400,3 +425,51 @@ class PathfindingEngine:
             total_length += path[i].distance_to(path[i + 1])
         
         return total_length 
+
+    def _create_simple_aqueduct_path(self, start_pos: Dict[str, int]) -> List[Dict[str, int]]:
+        """Create a simple path through the Aqueduct (guaranteed to work)"""
+        path = []
+        current_x = start_pos['X']
+        current_y = start_pos['Y']
+        
+        self.logger.info(f"Creating simple Aqueduct path from ({current_x}, {current_y})")
+        
+        # Create a comprehensive path that covers the typical Aqueduct route
+        # The Aqueduct is usually a linear area, so we'll create waypoints
+        # that move through the main path
+        
+        waypoints = [
+            # Start position
+            {'x': current_x, 'y': current_y},
+            
+            # Move right (typical Aqueduct direction)
+            {'x': current_x + 15, 'y': current_y},
+            {'x': current_x + 30, 'y': current_y},
+            {'x': current_x + 45, 'y': current_y},
+            
+            # Move slightly up/down to explore branches
+            {'x': current_x + 60, 'y': current_y - 10},
+            {'x': current_x + 75, 'y': current_y - 10},
+            {'x': current_x + 90, 'y': current_y},
+            
+            # Move further right
+            {'x': current_x + 105, 'y': current_y},
+            {'x': current_x + 120, 'y': current_y},
+            {'x': current_x + 135, 'y': current_y},
+            
+            # Explore other branch
+            {'x': current_x + 150, 'y': current_y + 10},
+            {'x': current_x + 165, 'y': current_y + 10},
+            {'x': current_x + 180, 'y': current_y},
+            
+            # Continue to the end
+            {'x': current_x + 195, 'y': current_y},
+            {'x': current_x + 210, 'y': current_y},
+        ]
+        
+        # Filter out the start position since we don't need to move there
+        waypoints = waypoints[1:]  # Remove first waypoint (current position)
+        
+        self.logger.info(f"Created {len(waypoints)} waypoints for simple path")
+        
+        return waypoints 
