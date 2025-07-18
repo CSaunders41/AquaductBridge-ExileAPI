@@ -31,8 +31,8 @@ namespace AqueductBridge
         private string lastError = "";
         
         // Visual path data
-        private List<Vector2> currentPath = new List<Vector2>();
-        private Vector2? targetPosition = null;
+        private List<SharpDX.Vector2> currentPath = new List<SharpDX.Vector2>();
+        private SharpDX.Vector2? targetPosition = null;
         private DateTime lastPathUpdate = DateTime.MinValue;
         private readonly object pathLock = new object();
 
@@ -631,7 +631,7 @@ namespace AqueductBridge
                         if (currentPath.Count > 0)
                         {
                             var firstWaypoint = currentPath[0];
-                            var firstScreenPos = camera.WorldToScreen(new Vector3(firstWaypoint.X, firstWaypoint.Y, 0));
+                            var firstScreenPos = camera.WorldToScreen(new Vector3(firstWaypoint.X, firstWaypoint.Y, 0f));
                             
                             if (IsValidScreenPosition(playerScreenPos) && IsValidScreenPosition(firstScreenPos))
                             {
@@ -650,8 +650,8 @@ namespace AqueductBridge
                             var fromPos = currentPath[i];
                             var toPos = currentPath[i + 1];
                             
-                            var fromScreenPos = camera.WorldToScreen(new Vector3(fromPos.X, fromPos.Y, 0));
-                            var toScreenPos = camera.WorldToScreen(new Vector3(toPos.X, toPos.Y, 0));
+                            var fromScreenPos = camera.WorldToScreen(new Vector3(fromPos.X, fromPos.Y, 0f));
+                            var toScreenPos = camera.WorldToScreen(new Vector3(toPos.X, toPos.Y, 0f));
                             
                             if (IsValidScreenPosition(fromScreenPos) && IsValidScreenPosition(toScreenPos))
                             {
@@ -669,15 +669,15 @@ namespace AqueductBridge
                     if (Settings.ShowTargetMarker.Value && targetPosition.HasValue)
                     {
                         var camera = GameController.IngameState.Camera;
-                        var targetScreenPos = camera.WorldToScreen(new Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0));
+                        var targetScreenPos = camera.WorldToScreen(new Vector3(targetPosition.Value.X, targetPosition.Value.Y, 0f));
                         
                         if (IsValidScreenPosition(targetScreenPos))
                         {
-                            var screenPos = new SharpDX.Vector2(targetScreenPos.X, targetScreenPos.Y);
+                            var screenPos = new Vector2(targetScreenPos.X, targetScreenPos.Y);
                             var radius = 10f;
                             
                             // Draw target circle
-                            Graphics.DrawEllipse(screenPos, radius, Settings.TargetMarkerColor.Value, Settings.PathLineWidth.Value);
+                            Graphics.DrawEllipse(screenPos, new Vector2(radius * 2, radius * 2), Settings.TargetMarkerColor.Value, Settings.PathLineWidth.Value);
                             
                             // Draw target cross
                             Graphics.DrawLine(
