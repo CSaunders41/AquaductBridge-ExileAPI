@@ -202,8 +202,15 @@ class IntelligentPathfinder:
             # Find zone exits
             exits = self.zone_analyzer.find_zone_exits(entities)
             
+            # Report exit detection
+            from debug_overlay import get_debug_overlay
+            debug_overlay = get_debug_overlay()
+            
             if not exits:
                 self.logger.warning("No zone exits found, falling back to exploration pattern")
+                if debug_overlay:
+                    debug_overlay.report_zone_exit_found("exit", {}, 0)
+                    debug_overlay.report_pathfinding_method("Exploration Pattern", False)
                 return self._create_exploration_path(start_pos)
             
             # Find optimal exit
@@ -211,7 +218,13 @@ class IntelligentPathfinder:
             
             if not target_exit:
                 self.logger.warning("No optimal exit found, falling back to exploration pattern")
+                if debug_overlay:
+                    debug_overlay.report_pathfinding_method("Optimal Exit Selection", False)
                 return self._create_exploration_path(start_pos)
+            
+            # Report exit found
+            if debug_overlay:
+                debug_overlay.report_zone_exit_found("exit", {'x': target_exit.x, 'y': target_exit.y}, len(exits))
             
             # Use A* pathfinding if we have terrain data
             if self.terrain_analyzer.grid:
@@ -222,12 +235,19 @@ class IntelligentPathfinder:
                     # Convert to dictionary format
                     result_path = [{'x': pos.x, 'y': pos.y} for pos in path]
                     self.logger.info(f"Created A* path with {len(result_path)} waypoints")
+                    if debug_overlay:
+                        debug_overlay.report_pathfinding_method("A* Pathfinding", True)
                     return result_path
                 else:
                     self.logger.warning("A* pathfinding failed, trying direct path")
+                    if debug_overlay:
+                        debug_overlay.report_pathfinding_method("A* Pathfinding", False)
+                        debug_overlay.report_pathfinding_method("Direct Path", True)
                     return self._create_direct_path(start, target_exit)
             else:
                 self.logger.warning("No terrain data available, creating direct path to exit")
+                if debug_overlay:
+                    debug_overlay.report_pathfinding_method("Direct Path (No Terrain)", True)
                 return self._create_direct_path(start, target_exit)
                 
         except Exception as e:

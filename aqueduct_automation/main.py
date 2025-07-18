@@ -64,6 +64,10 @@ class AqueductAutomation:
         from coordinate_fix import get_coordinate_fix
         self.coordinate_fix = get_coordinate_fix()
         
+        # Initialize debug overlay
+        from debug_overlay import get_debug_overlay
+        self.debug_overlay = get_debug_overlay(self.api_client)
+        
         # Stats tracking
         self.stats = FarmingStats()
         self.current_state = "initializing"
@@ -196,6 +200,9 @@ class AqueductAutomation:
         self.logger.info("Starting Aqueduct farming")
         
         try:
+            # Update debug overlay
+            self.debug_overlay.set_current_task("Scanning Area & Creating Path")
+            
             # Get initial position and terrain
             game_data = self.api_client.get_full_game_data()
             
@@ -212,6 +219,15 @@ class AqueductAutomation:
             
             self.logger.info(f"Created intelligent path with {len(path)} waypoints")
             
+            # Update debug overlay with path info
+            if path:
+                self.debug_overlay.set_current_task("Following Path to Exit")
+                target = path[-1] if path else None
+                if target:
+                    from utils import calculate_distance
+                    distance = calculate_distance(game_data['player_pos'], target)
+                    self.debug_overlay.set_target_info("Zone Exit", target, distance)
+            
             # Send path data to plugin for visualization
             if len(path) > 0:
                 target = path[-1] if path else None  # Last waypoint is the target
@@ -222,16 +238,23 @@ class AqueductAutomation:
             for i, waypoint in enumerate(path):
                 self.logger.info(f"Moving to waypoint {i+1}/{len(path)}: {waypoint}")
                 
+                # Update debug overlay with current waypoint
+                self.debug_overlay.set_path_info(len(path), i+1, waypoint)
+                self.debug_overlay.update_display()
+                
                 # Move to waypoint
                 movement_successful = self.move_to_position(waypoint)
                 
                 if movement_successful:
                     successful_moves += 1
+                    self.debug_overlay.report_movement_result(True, 0, "Reached waypoint")
                     
                     # Check for and handle combat
                     if self.combat_system.scan_for_enemies():
+                        self.debug_overlay.set_current_task("Engaging Combat")
                         killed = self.combat_system.engage_combat()
                         self.stats.monsters_killed += killed
+                        self.debug_overlay.set_current_task("Following Path to Exit")
                     
                     # Check for loot
                     loot_collected = self.loot_manager.collect_nearby_loot()
@@ -242,14 +265,20 @@ class AqueductAutomation:
                     
                     # Check if inventory is full
                     if self.loot_manager.is_inventory_full():
+                        self.debug_overlay.set_current_task("Inventory Full - Returning to Stash")
                         self.logger.info("Inventory full, returning to stash")
                         break
                         
                     # Safety check - if health too low, retreat
                     if self.resource_manager.should_retreat():
+                        self.debug_overlay.set_current_task("Health Critical - Retreating")
                         self.logger.warning("Health critical, retreating")
                         break
                 else:
+                    from utils import calculate_distance
+                    current_pos = self.api_client.get_player_position()
+                    distance = calculate_distance(current_pos, waypoint)
+                    self.debug_overlay.report_movement_result(False, distance, "Stuck or blocked")
                     self.logger.warning(f"Failed to move to waypoint {i+1}, continuing to next")
                     
             self.logger.info(f"Completed path traversal: {successful_moves}/{len(path)} waypoints reached")
