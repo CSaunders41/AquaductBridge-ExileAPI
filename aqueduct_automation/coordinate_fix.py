@@ -34,10 +34,10 @@ class CoordinateFix:
         """Convert grid coordinates to screen coordinates"""
         try:
             if not self.game_window:
-                # Default fallback - use screen center with small offset
+                # Default fallback - use screen center with meaningful offset
                 center_x, center_y = 960, 540
-                offset_x = (grid_x - 500) * 0.5  # Much smaller scaling
-                offset_y = (grid_y - 300) * 0.5
+                offset_x = (grid_x - 500) * 1.5  # Increased scaling for better movement
+                offset_y = (grid_y - 300) * 1.5
                 screen_x = int(center_x + offset_x)
                 screen_y = int(center_y + offset_y)
                 # Ensure within bounds
@@ -56,9 +56,9 @@ class CoordinateFix:
             player_grid_x = 500  # Rough estimate
             player_grid_y = 300  # Rough estimate
             
-            # Convert grid to screen with much smaller scaling
-            # Use a scaling factor that keeps coordinates reasonable
-            scale_factor = 0.3  # Much smaller scale
+            # Convert grid to screen with appropriate scaling
+            # Use a scaling factor that produces meaningful movement
+            scale_factor = 1.5  # Increased for better movement
             
             offset_x = (grid_x - player_grid_x) * scale_factor
             offset_y = (grid_y - player_grid_y) * scale_factor

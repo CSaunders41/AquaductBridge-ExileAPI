@@ -442,29 +442,29 @@ class PathfindingEngine:
             # Start position
             {'x': current_x, 'y': current_y},
             
-            # Move right (typical Aqueduct direction)
-            {'x': current_x + 15, 'y': current_y},
+            # Move right (typical Aqueduct direction) - larger movements
             {'x': current_x + 30, 'y': current_y},
-            {'x': current_x + 45, 'y': current_y},
-            
-            # Move slightly up/down to explore branches
-            {'x': current_x + 60, 'y': current_y - 10},
-            {'x': current_x + 75, 'y': current_y - 10},
+            {'x': current_x + 60, 'y': current_y},
             {'x': current_x + 90, 'y': current_y},
             
-            # Move further right
-            {'x': current_x + 105, 'y': current_y},
-            {'x': current_x + 120, 'y': current_y},
-            {'x': current_x + 135, 'y': current_y},
-            
-            # Explore other branch
-            {'x': current_x + 150, 'y': current_y + 10},
-            {'x': current_x + 165, 'y': current_y + 10},
+            # Move slightly up/down to explore branches - larger movements
+            {'x': current_x + 120, 'y': current_y - 20},
+            {'x': current_x + 150, 'y': current_y - 20},
             {'x': current_x + 180, 'y': current_y},
             
-            # Continue to the end
-            {'x': current_x + 195, 'y': current_y},
+            # Move further right - larger movements
             {'x': current_x + 210, 'y': current_y},
+            {'x': current_x + 240, 'y': current_y},
+            {'x': current_x + 270, 'y': current_y},
+            
+            # Explore other branch - larger movements
+            {'x': current_x + 300, 'y': current_y + 20},
+            {'x': current_x + 330, 'y': current_y + 20},
+            {'x': current_x + 360, 'y': current_y},
+            
+            # Continue to the end - larger movements
+            {'x': current_x + 390, 'y': current_y},
+            {'x': current_x + 420, 'y': current_y},
         ]
         
         # Filter out the start position since we don't need to move there
