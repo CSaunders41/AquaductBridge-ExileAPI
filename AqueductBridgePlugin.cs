@@ -353,36 +353,52 @@ namespace AqueductBridge
             try
             {
                 var terrainData = GameController?.IngameState?.Data?.Terrain;
-                if (terrainData?.LayerMelee == null)
+                if (terrainData?.LayerMelee.First == IntPtr.Zero)
                 {
                     return "";
                 }
 
-                var terrain = terrainData.LayerMelee;
-                var width = terrainData.NumCols;
-                var height = terrainData.NumRows;
+                var terrainBytes = GameController.Memory.ReadBytes(terrainData.LayerMelee.First, terrainData.LayerMelee.Size);
+                var width = (int)(terrainData.NumCols - 1) * 23;
+                var height = (int)(terrainData.NumRows - 1) * 23;
 
                 var sb = new StringBuilder();
+                if ((width & 1) > 0) width++;
+                
                 for (int y = 0; y < height; y++)
                 {
-                    for (int x = 0; x < width; x++)
+                    var dataIndex = y * terrainData.BytesPerRow;
+                    for (int x = 0; x < width; x += 2)
                     {
-                        var index = y * width + x;
-                        if (index < terrain.Length)
+                        if (dataIndex + (x >> 1) < terrainBytes.Length)
                         {
+                            var b = terrainBytes[dataIndex + (x >> 1)];
+                            var terrainValue1 = b & 15;
+                            var terrainValue2 = (b >> 4) & 15;
+                            
                             // Convert terrain value to aqueduct_runner format
-                            // ExileApi: 0 = passable, 1 = not passable
+                            // ExileApi: 0 = passable, 1+ = not passable
                             // aqueduct_runner: 51 = passable, 49 = not passable
-                            var terrainValue = terrain[index];
-                            var convertedValue = terrainValue == 0 ? 51 : 49;
-                            sb.Append(convertedValue);
+                            var convertedValue1 = terrainValue1 == 0 ? 51 : 49;
+                            sb.Append(convertedValue1);
+                            
+                            if (x + 1 < width)
+                            {
+                                var convertedValue2 = terrainValue2 == 0 ? 51 : 49;
+                                sb.Append(" ");
+                                sb.Append(convertedValue2);
+                            }
                         }
                         else
                         {
                             sb.Append("49"); // Default to not passable
+                            if (x + 1 < width)
+                            {
+                                sb.Append(" 49");
+                            }
                         }
 
-                        if (x < width - 1)
+                        if (x < width - 2)
                         {
                             sb.Append(" ");
                         }
@@ -417,7 +433,7 @@ namespace AqueductBridge
                 {
                     X = (int)gridPos.X,
                     Y = (int)gridPos.Y,
-                    Z = (int)gridPos.Z
+                    Z = 0
                 };
             }
             catch (Exception ex)
@@ -455,7 +471,7 @@ namespace AqueductBridge
                                 continue;
 
                             var gridPos = entity.GridPos;
-                            var worldPos = new Vector3(gridPos.X, gridPos.Y, gridPos.Z);
+                            var worldPos = new Vector3(gridPos.X, gridPos.Y, 0);
                             var screenPos = camera.WorldToScreen(worldPos);
 
                             // Get entity type for aqueduct_runner
@@ -469,25 +485,25 @@ namespace AqueductBridge
                                 {
                                     Current = life?.CurHP ?? 0,
                                     Total = life?.MaxHP ?? 0,
-                                    ReservedTotal = life?.ReservedHP ?? 0
+                                    ReservedTotal = 0
                                 },
                                 Mana = new
                                 {
                                     Current = life?.CurMana ?? 0,
                                     Total = life?.MaxMana ?? 0,
-                                    ReservedTotal = life?.ReservedMana ?? 0
+                                    ReservedTotal = 0
                                 },
                                 EnergyShield = new
                                 {
                                     Current = life?.CurES ?? 0,
                                     Total = life?.MaxES ?? 0,
-                                    ReservedTotal = life?.ReservedES ?? 0
+                                    ReservedTotal = 0
                                 }
                             };
 
                             entities.Add(new
                             {
-                                GridPosition = new { X = (int)gridPos.X, Y = (int)gridPos.Y, Z = (int)gridPos.Z },
+                                GridPosition = new { X = (int)gridPos.X, Y = (int)gridPos.Y, Z = 0 },
                                 location_on_screen = new { X = (int)screenPos.X, Y = (int)screenPos.Y },
                                 EntityType = entityType,
                                 Path = entity.Path ?? "",
@@ -561,19 +577,19 @@ namespace AqueductBridge
                     {
                         Current = life.CurHP,
                         Total = life.MaxHP,
-                        ReservedTotal = life.ReservedHP
+                        ReservedTotal = 0
                     },
                     Mana = new
                     {
                         Current = life.CurMana,
                         Total = life.MaxMana,
-                        ReservedTotal = life.ReservedMana
+                        ReservedTotal = 0
                     },
                     EnergyShield = new
                     {
                         Current = life.CurES,
                         Total = life.MaxES,
-                        ReservedTotal = life.ReservedES
+                        ReservedTotal = 0
                     }
                 };
             }
