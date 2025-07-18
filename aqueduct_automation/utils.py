@@ -59,13 +59,25 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True, log_file: s
 def calculate_distance(pos1: Dict[str, Any], pos2: Dict[str, Any]) -> float:
     """Calculate Euclidean distance between two positions"""
     try:
-        x1, y1 = pos1.get('X', 0), pos1.get('Y', 0)
-        x2, y2 = pos2.get('X', 0), pos2.get('Y', 0)
+        # Handle both uppercase and lowercase keys
+        x1 = pos1.get('X', pos1.get('x', 0))
+        y1 = pos1.get('Y', pos1.get('y', 0))
+        x2 = pos2.get('X', pos2.get('x', 0))
+        y2 = pos2.get('Y', pos2.get('y', 0))
         
         dx = x2 - x1
         dy = y2 - y1
         
-        return math.sqrt(dx * dx + dy * dy)
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        # Debug logging for troubleshooting
+        if distance > 500:  # Suspiciously high distance
+            logging.warning(f"High distance calculated: {distance:.2f}")
+            logging.warning(f"Pos1: {pos1}")
+            logging.warning(f"Pos2: {pos2}")
+            logging.warning(f"Extracted coords: ({x1}, {y1}) to ({x2}, {y2})")
+        
+        return distance
         
     except Exception as e:
         logging.error(f"Error calculating distance: {e}")

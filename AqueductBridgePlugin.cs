@@ -373,91 +373,99 @@ namespace AqueductBridge
                     DebugWindow.LogMsg("TerrainData is null");
                 }
                 
-                // Temporary fallback - return a simple terrain string to get the plugin working
-                // TODO: Fix terrain data access once we understand the correct TerrainData properties
+                // Try to get real terrain data first
+                var terrain = GameController?.IngameState?.Data?.Terrain;
+                if (terrain != null)
+                {
+                    try
+                    {
+                        // Try to access terrain data
+                        var terrainSize = terrain.LayerMelee.Size;
+                        if (terrainSize > 0)
+                        {
+                            var terrainBytes = GameController.Memory.ReadBytes(terrain.LayerMelee.First, terrainSize);
+                            var width = (int)(terrain.NumCols - 1) * 23;
+                            var height = (int)(terrain.NumRows - 1) * 23;
+
+                            var sb = new StringBuilder();
+                            if ((width & 1) > 0) width++;
+                            
+                            for (int y = 0; y < height; y++)
+                            {
+                                var dataIndex = y * terrain.BytesPerRow;
+                                for (int x = 0; x < width; x += 2)
+                                {
+                                    if (dataIndex + (x >> 1) < terrainBytes.Length)
+                                    {
+                                        var b = terrainBytes[dataIndex + (x >> 1)];
+                                        var terrainValue1 = b & 15;
+                                        var terrainValue2 = (b >> 4) & 15;
+                                        
+                                        // Convert terrain value to aqueduct_runner format
+                                        // ExileApi: 0 = passable, 1+ = not passable
+                                        // aqueduct_runner: 51 = passable, 49 = not passable
+                                        var convertedValue1 = terrainValue1 == 0 ? 51 : 49;
+                                        sb.Append(convertedValue1);
+                                        
+                                        if (x + 1 < width)
+                                        {
+                                            var convertedValue2 = terrainValue2 == 0 ? 51 : 49;
+                                            sb.Append(" ");
+                                            sb.Append(convertedValue2);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        sb.Append("49"); // Default to not passable
+                                        if (x + 1 < width)
+                                        {
+                                            sb.Append(" 49");
+                                        }
+                                    }
+
+                                    if (x < width - 2)
+                                    {
+                                        sb.Append(" ");
+                                    }
+                                }
+                                if (y < height - 1)
+                                {
+                                    sb.Append("\r\n");
+                                }
+                            }
+                            
+                            DebugWindow.LogMsg($"GetTerrainString: Generated real terrain data {width}x{height}");
+                            return sb.ToString();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        DebugWindow.LogError($"Error accessing real terrain data: {ex.Message}");
+                    }
+                }
+                
+                // Fallback to simple terrain if real data fails
                 DebugWindow.LogMsg("GetTerrainString: Using fallback terrain data");
                 
-                // Return a simple 10x10 grid of passable terrain for testing
-                var sb = new StringBuilder();
-                for (int y = 0; y < 10; y++)
+                // Return a larger grid for better pathfinding
+                var sb2 = new StringBuilder();
+                for (int y = 0; y < 50; y++)
                 {
-                    for (int x = 0; x < 10; x++)
+                    for (int x = 0; x < 50; x++)
                     {
-                        sb.Append("51"); // All passable for now
-                        if (x < 9)
+                        sb2.Append("51"); // All passable for now
+                        if (x < 49)
                         {
-                            sb.Append(" ");
+                            sb2.Append(" ");
                         }
                     }
-                    if (y < 9)
+                    if (y < 49)
                     {
-                        sb.Append("\r\n");
+                        sb2.Append("\r\n");
                     }
                 }
                 
-                return sb.ToString();
-                
-                /* 
-                // Original terrain data access - commented out until we fix the properties
-                var terrain = GameController?.IngameState?.Data?.Terrain;
-                if (terrain?.LayerMelee.First == IntPtr.Zero)
-                {
-                    return "";
-                }
-
-                var terrainBytes = GameController.Memory.ReadBytes(terrain.LayerMelee.First, terrain.LayerMelee.Size);
-                var width = (int)(terrain.NumCols - 1) * 23;
-                var height = (int)(terrain.NumRows - 1) * 23;
-
-                var sb = new StringBuilder();
-                if ((width & 1) > 0) width++;
-                
-                for (int y = 0; y < height; y++)
-                {
-                    var dataIndex = y * terrain.BytesPerRow;
-                    for (int x = 0; x < width; x += 2)
-                    {
-                        if (dataIndex + (x >> 1) < terrainBytes.Length)
-                        {
-                            var b = terrainBytes[dataIndex + (x >> 1)];
-                            var terrainValue1 = b & 15;
-                            var terrainValue2 = (b >> 4) & 15;
-                            
-                            // Convert terrain value to aqueduct_runner format
-                            // ExileApi: 0 = passable, 1+ = not passable
-                            // aqueduct_runner: 51 = passable, 49 = not passable
-                            var convertedValue1 = terrainValue1 == 0 ? 51 : 49;
-                            sb.Append(convertedValue1);
-                            
-                            if (x + 1 < width)
-                            {
-                                var convertedValue2 = terrainValue2 == 0 ? 51 : 49;
-                                sb.Append(" ");
-                                sb.Append(convertedValue2);
-                            }
-                        }
-                        else
-                        {
-                            sb.Append("49"); // Default to not passable
-                            if (x + 1 < width)
-                            {
-                                sb.Append(" 49");
-                            }
-                        }
-
-                        if (x < width - 2)
-                        {
-                            sb.Append(" ");
-                        }
-                    }
-                    if (y < height - 1)
-                    {
-                        sb.Append("\r\n");
-                    }
-                }
-
-                return sb.ToString();
-                */
+                return sb2.ToString();
             }
             catch (Exception ex)
             {
