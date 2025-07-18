@@ -304,15 +304,22 @@ class IntelligentPathfinder:
         
         # Calculate distance and create waypoints
         distance = start.distance_to(goal)
-        num_waypoints = max(5, int(distance / 30))  # Waypoint every 30 units
         
-        for i in range(1, num_waypoints + 1):
-            progress = i / num_waypoints
-            waypoint_x = int(start.x + (goal.x - start.x) * progress)
-            waypoint_y = int(start.y + (goal.y - start.y) * progress)
-            path.append({'x': waypoint_x, 'y': waypoint_y})
+        # Create waypoints with larger spacing for better movement
+        if distance < 20:
+            # For short distances, just go directly
+            path.append({'x': goal.x, 'y': goal.y})
+        else:
+            # For longer distances, create waypoints every 15 units (instead of smaller spacing)
+            num_waypoints = max(2, int(distance / 15))
+            
+            for i in range(1, num_waypoints + 1):
+                progress = i / num_waypoints
+                waypoint_x = int(start.x + (goal.x - start.x) * progress)
+                waypoint_y = int(start.y + (goal.y - start.y) * progress)
+                path.append({'x': waypoint_x, 'y': waypoint_y})
         
-        self.logger.info(f"Created direct path with {len(path)} waypoints to exit")
+        self.logger.info(f"Created direct path with {len(path)} waypoints to exit (distance: {distance:.1f})")
         return path
     
     def _create_exploration_path(self, start_pos: Dict[str, int]) -> List[Dict[str, int]]:
@@ -324,26 +331,27 @@ class IntelligentPathfinder:
         self.logger.info(f"Creating exploration path from ({current_x}, {current_y})")
         
         # Create a more intelligent exploration pattern
-        # This spirals out from the starting position to explore the area
+        # This moves in expanding directions to explore the area
         waypoints = [
-            # Initial forward movement
-            {'x': current_x + 40, 'y': current_y},
-            {'x': current_x + 80, 'y': current_y},
-            
-            # Spiral pattern to explore
-            {'x': current_x + 80, 'y': current_y + 40},
-            {'x': current_x + 40, 'y': current_y + 40},
-            {'x': current_x, 'y': current_y + 40},
-            {'x': current_x - 40, 'y': current_y + 40},
-            {'x': current_x - 40, 'y': current_y},
-            {'x': current_x - 40, 'y': current_y - 40},
-            {'x': current_x, 'y': current_y - 40},
-            {'x': current_x + 40, 'y': current_y - 40},
-            
-            # Extend further
+            # Initial forward movement - larger steps
+            {'x': current_x + 60, 'y': current_y},
             {'x': current_x + 120, 'y': current_y},
-            {'x': current_x + 160, 'y': current_y},
-            {'x': current_x + 200, 'y': current_y},
+            {'x': current_x + 180, 'y': current_y},
+            
+            # Explore up and down branches - larger steps
+            {'x': current_x + 180, 'y': current_y + 60},
+            {'x': current_x + 120, 'y': current_y + 60},
+            {'x': current_x + 60, 'y': current_y + 60},
+            
+            # Explore down branch
+            {'x': current_x + 60, 'y': current_y - 60},
+            {'x': current_x + 120, 'y': current_y - 60},
+            {'x': current_x + 180, 'y': current_y - 60},
+            
+            # Extend further out
+            {'x': current_x + 240, 'y': current_y},
+            {'x': current_x + 300, 'y': current_y},
+            {'x': current_x + 360, 'y': current_y},
         ]
         
         self.logger.info(f"Created exploration path with {len(waypoints)} waypoints")

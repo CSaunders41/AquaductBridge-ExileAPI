@@ -280,6 +280,10 @@ class AqueductAutomation:
                 # Try safe click near player as fallback
                 screen_coords = self.coordinate_fix.get_safe_click_near_player(current_pos)
                 self.logger.info(f"Using safe click position: {screen_coords}")
+                
+                if not screen_coords:
+                    self.logger.error("Failed to get any valid screen coordinates")
+                    return False
             
             # Debug coordinate information
             self.logger.info(f"Moving to world pos {target_pos} -> screen pos {screen_coords}")
@@ -287,19 +291,21 @@ class AqueductAutomation:
             # In safe mode, don't actually click
             if self.safe_mode:
                 self.logger.info(f"SAFE MODE: Would click at {screen_coords}")
-                return
+                return True  # Assume success in safe mode
             
             # Click to move
             success = self.api_client.click_position(screen_coords[0], screen_coords[1])
             if not success:
                 self.logger.warning(f"Failed to click at {screen_coords}")
-                return
+                return False
             
             # Wait for movement
-            self.wait_for_movement(current_pos, target_pos)
+            movement_successful = self.wait_for_movement(current_pos, target_pos)
+            return movement_successful
             
         except Exception as e:
             self.logger.error(f"Failed to move to position: {e}")
+            return False
     
     def wait_for_movement(self, start_pos: Dict, target_pos: Dict, timeout: float = 5.0):
         """Wait for player to reach target position"""
@@ -315,7 +321,7 @@ class AqueductAutomation:
             
             self.logger.debug(f"Current pos: {current_pos}, Distance to target: {distance_to_target:.2f}, Distance from start: {distance_from_start:.2f}")
             
-            if distance_to_target < 10:  # Close enough
+            if distance_to_target < 5:  # Close enough (tighter tolerance)
                 self.logger.debug("Reached target position")
                 break
                 
@@ -336,12 +342,12 @@ class AqueductAutomation:
         final_distance = calculate_distance(final_pos, target_pos)
         elapsed = time.time() - start_time
         
-        if final_distance < 10:
+        if final_distance < 5:
             self.logger.info(f"Successfully reached target in {elapsed:.2f}s")
+            return True
         else:
             self.logger.warning(f"Did not reach target after {elapsed:.2f}s. Final distance: {final_distance:.2f}")
-            
-        return final_distance < 10
+            return False
     
     def return_to_hideout(self):
         """Return to hideout via portal or waypoint"""
