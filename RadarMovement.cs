@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using ExileCore;
@@ -84,6 +85,12 @@ namespace RadarMovement
         
         [Menu("Terrain Check Range")]
         public RangeNode<float> TerrainCheckRange { get; set; } = new RangeNode<float>(100f, 50f, 300f);
+        
+        [Menu("Show Coroutine Status")]
+        public ToggleNode ShowCoroutineStatus { get; set; } = new ToggleNode(false);
+        
+        [Menu("Area Transition Timeout (ms)")]
+        public RangeNode<int> TransitionTimeout { get; set; } = new RangeNode<int>(10000, 5000, 30000);
     }
 
     public class RadarMovement : BaseSettingsPlugin<RadarMovementSettings>
@@ -95,11 +102,17 @@ namespace RadarMovement
         // Terrain analysis system
         private LineOfSight lineOfSight = null;
         
+        // Coroutine system
+        private Coroutine mainProcessingCoroutine = null;
+        private Coroutine areaTransitionCoroutine = null;
+        private bool processingPaused = false;
+        
         // Timing and state management
         private DateTime lastTaskScan = DateTime.MinValue;
         private DateTime lastMovement = DateTime.MinValue;
         private DateTime lastAreaChange = DateTime.MinValue;
         private string currentArea = "";
+        private string expectedDestinationArea = "";
         
         // Debug and performance tracking
         private List<string> debugMessages = new List<string>();
@@ -107,6 +120,7 @@ namespace RadarMovement
         private int tasksCompletedThisSession = 0;
         private int tasksFailedThisSession = 0;
         private int targetsFilteredByTerrain = 0;
+        private int areaTransitionsThisSession = 0;
         
         // State tracking
         private bool isTransitioning = false;
@@ -128,8 +142,11 @@ namespace RadarMovement
                 eventBus.Subscribe<TaskCompletedEvent>(OnTaskCompleted);
                 eventBus.Subscribe<PlayerStuckEvent>(OnPlayerStuck);
 
-                AddDebugMessage("RadarMovement initialized with EventBus integration and LineOfSight");
-                LogMessage("RadarMovement v2.1 - Task-based system with terrain analysis initialized");
+                // Start main processing coroutine
+                StartMainProcessingCoroutine();
+
+                AddDebugMessage("RadarMovement initialized with EventBus integration, LineOfSight, and Coroutine processing");
+                LogMessage("RadarMovement v3.0 - Coroutine-based async processing system initialized");
                 
                 return true;
             }
@@ -149,14 +166,13 @@ namespace RadarMovement
                 currentArea = newArea;
                 lastAreaChange = DateTime.Now;
 
-                // Handle area transition
+                // Handle area transition with coroutine
                 if (isTransitioning)
                 {
-                    AddDebugMessage($"Area transition completed: {previousArea} -> {newArea}");
-                    isTransitioning = false;
+                    AddDebugMessage($"Expected area transition: {previousArea} -> {newArea}");
                     
-                    // Clear old tasks that are no longer relevant
-                    ClearInvalidTasks("Area changed");
+                    // Start grace period coroutine to handle post-transition cleanup
+                    StartAreaTransitionGracePeriod();
                     
                     // Publish area change event
                     EventBus.Instance.Publish(new AreaChangeEvent { 
@@ -166,9 +182,14 @@ namespace RadarMovement
                 }
                 else
                 {
-                    // Unexpected area change - reset everything
+                    // Unexpected area change - pause processing and reset state
                     AddDebugMessage($"Unexpected area change: {previousArea} -> {newArea}");
+                    PauseProcessing("Unexpected area change");
                     ResetState("Unexpected area change");
+                    
+                    // Resume processing after a brief pause
+                    System.Threading.Tasks.Task.Delay(2000).ContinueWith(_ => 
+                        ResumeProcessing("Recovery from unexpected area change"));
                 }
 
                 base.AreaChange();
@@ -179,25 +200,41 @@ namespace RadarMovement
             }
         }
 
+        private void StartAreaTransitionGracePeriod()
+        {
+            try
+            {
+                // Stop any existing area transition coroutine
+                if (areaTransitionCoroutine != null)
+                {
+                    Core.ParallelRunner.FindByName("RadarMovement_AreaTransition")?.Done = true;
+                }
+
+                // Start new grace period coroutine
+                areaTransitionCoroutine = new Coroutine(PostAreaTransitionGracePeriod(), this, "RadarMovement_AreaTransition");
+                Core.ParallelRunner.Run(areaTransitionCoroutine);
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error starting area transition grace period: {ex.Message}");
+                // Fallback - just clear the transition flag
+                isTransitioning = false;
+                processingPaused = false;
+            }
+        }
+
         public override void Render()
         {
             if (!Settings.Enable.Value) return;
 
             try
             {
-                // Update performance stats
-                UpdatePerformanceStats();
-                
-                // Process task queue
-                ProcessTaskQueue();
-                
-                // Render visual elements
+                // Only handle visualization in Render - main processing is now in coroutines
                 if (Settings.Visual.ShowPathLine.Value || Settings.Visual.ShowTaskQueue.Value)
                 {
                     RenderVisuals();
                 }
                 
-                // Render debug information
                 if (Settings.Debug.ShowDebug.Value)
                 {
                     RenderDebugInfo();
@@ -212,6 +249,153 @@ namespace RadarMovement
                 AddDebugMessage($"Render error: {ex.Message}");
             }
         }
+
+        #region Coroutine System
+
+        private void StartMainProcessingCoroutine()
+        {
+            try
+            {
+                if (mainProcessingCoroutine != null)
+                {
+                    // Stop existing coroutine
+                    Core.ParallelRunner.FindByName("RadarMovement_MainProcessing")?.Done = true;
+                }
+
+                mainProcessingCoroutine = new Coroutine(MainProcessingCoroutine(), this, "RadarMovement_MainProcessing");
+                Core.ParallelRunner.Run(mainProcessingCoroutine);
+                
+                AddDebugMessage("Main processing coroutine started");
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error starting main processing coroutine: {ex.Message}");
+            }
+        }
+
+        private IEnumerator MainProcessingCoroutine()
+        {
+            while (true)
+            {
+                try
+                {
+                    // ========================================
+                    // SECTION 1: SAFETY CHECKS
+                    // ========================================
+                    if (!Settings.Enable.Value || 
+                        !GameController.InGame || 
+                        GameController.Player == null || 
+                        !GameController.Player.IsAlive ||
+                        GameController.IsLoading ||
+                        processingPaused)
+                    {
+                        yield return new WaitTime(100);
+                        continue;
+                    }
+
+                    // ========================================
+                    // SECTION 2: PERFORMANCE STATS UPDATE
+                    // ========================================
+                    UpdatePerformanceStats();
+
+                    // ========================================
+                    // SECTION 3: TASK QUEUE PROCESSING
+                    // ========================================
+                    if (!isTransitioning) // Don't process tasks during area transitions
+                    {
+                        ProcessTaskQueue();
+                    }
+                    else
+                    {
+                        // During transitions, just clean up invalid tasks
+                        CleanupTaskQueue();
+                    }
+
+                    // ========================================
+                    // SECTION 4: WAIT FOR NEXT CYCLE
+                    // ========================================
+                    var waitTime = isTransitioning ? 200 : Settings.Movement.MovementDelay.Value;
+                    yield return new WaitTime(waitTime);
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Error in main processing coroutine: {ex.Message}");
+                    AddDebugMessage($"Main coroutine error: {ex.Message}");
+                    yield return new WaitTime(1000); // Wait longer on errors
+                }
+            }
+        }
+
+        private IEnumerator PostAreaTransitionGracePeriod()
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var timeoutMs = Settings.Debug.TransitionTimeout.Value; // Configurable timeout
+            const int CHECK_INTERVAL_MS = 200;
+
+            AddDebugMessage($"Starting post-transition grace period for area: {expectedDestinationArea}");
+
+            while (stopwatch.ElapsedMilliseconds < timeoutMs)
+            {
+                try
+                {
+                    // Check if we're in the expected area
+                    var currentAreaName = GameController.Area?.CurrentArea?.DisplayName ?? "Unknown";
+                    
+                    if (!string.IsNullOrEmpty(expectedDestinationArea) && 
+                        currentAreaName.Contains(expectedDestinationArea.Split('/')[0]) || // Handle area variations
+                        currentAreaName == expectedDestinationArea)
+                    {
+                        // Successfully reached expected destination
+                        AddDebugMessage($"Transition successful: Now in {currentAreaName}");
+                        areaTransitionsThisSession++;
+                        break;
+                    }
+
+                    // Check if game is stable (not loading, player exists)
+                    if (GameController.InGame && 
+                        GameController.Player != null && 
+                        !GameController.IsLoading)
+                    {
+                        // Game is stable but might be unexpected area - continue anyway
+                        AddDebugMessage($"Game stable in area: {currentAreaName}");
+                        break;
+                    }
+
+                    yield return new WaitTime(CHECK_INTERVAL_MS);
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Error in grace period: {ex.Message}");
+                    yield return new WaitTime(CHECK_INTERVAL_MS);
+                }
+            }
+
+            // Grace period complete - resume normal processing
+            isTransitioning = false;
+            processingPaused = false;
+            expectedDestinationArea = "";
+            
+            AddDebugMessage($"Grace period complete. Resuming normal processing.");
+            
+            // Clear old tasks that might be invalid in the new area
+            ClearInvalidTasks("Area transition complete");
+
+            stopwatch.Stop();
+        }
+
+        private void PauseProcessing(string reason)
+        {
+            processingPaused = true;
+            AddDebugMessage($"Processing paused: {reason}");
+        }
+
+        private void ResumeProcessing(string reason)
+        {
+            processingPaused = false;
+            AddDebugMessage($"Processing resumed: {reason}");
+        }
+
+        #endregion
 
         #region Event Handlers
 
@@ -492,7 +676,7 @@ namespace RadarMovement
                     // Perform the click
                     Input.SetCursorPos(screenPos);
                     Mouse.LeftDown();
-                    System.Threading.Thread.Sleep(10);
+                    // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
                     Mouse.LeftUp();
 
                     lastMovement = DateTime.Now;
@@ -501,7 +685,9 @@ namespace RadarMovement
                     if (task.Type == RadarTaskType.ClickTransition || task.Type == RadarTaskType.ClickWaypoint)
                     {
                         isTransitioning = true;
-                        AddDebugMessage($"Initiated transition to: {task.ExpectedDestination}");
+                        expectedDestinationArea = task.ExpectedDestination ?? "Unknown";
+                        PauseProcessing($"Initiating area transition to {expectedDestinationArea}");
+                        AddDebugMessage($"Initiated transition to: {expectedDestinationArea}");
                     }
 
                     AddDebugMessage($"Performed action for task: {task.Type}");
@@ -564,7 +750,7 @@ namespace RadarMovement
                 {
                     Input.SetCursorPos(screenPos);
                     Mouse.LeftDown();
-                    System.Threading.Thread.Sleep(10);
+                    // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
                     Mouse.LeftUp();
 
                     lastMovement = DateTime.Now;
@@ -678,7 +864,13 @@ namespace RadarMovement
                 var totalTasks = tasksCompletedThisSession + tasksFailedThisSession;
                 var successRate = totalTasks > 0 ? (float)tasksCompletedThisSession / totalTasks * 100f : 0f;
                 
-                AddDebugMessage($"Performance: {tasksCompletedThisSession}/{totalTasks} tasks ({successRate:F1}% success), {targetsFilteredByTerrain} filtered by terrain");
+                var coroutineStatus = mainProcessingCoroutine?.IsDone == false ? "Running" : "Stopped";
+                var processingStatus = processingPaused ? "Paused" : "Active";
+                var transitionStatus = isTransitioning ? $"Transitioning to {expectedDestinationArea}" : "Stable";
+                
+                AddDebugMessage($"Performance: {tasksCompletedThisSession}/{totalTasks} tasks ({successRate:F1}% success), {areaTransitionsThisSession} transitions");
+                AddDebugMessage($"Status: Coroutine {coroutineStatus}, Processing {processingStatus}, {transitionStatus}");
+                AddDebugMessage($"Filtered: {targetsFilteredByTerrain} by terrain, Queue: {taskQueue.Count} tasks");
             }
         }
 
@@ -975,6 +1167,26 @@ namespace RadarMovement
 
                     // Show filtered targets count
                     Graphics.DrawText($"Filtered by terrain: {targetsFilteredByTerrain}", new Vector2(x, startY), Color.Orange);
+                    startY += lineHeight;
+
+                    // Show coroutine status if enabled
+                    if (Settings.Debug.ShowCoroutineStatus.Value)
+                    {
+                        var mainStatus = mainProcessingCoroutine?.IsDone == false ? "Running" : "Stopped";
+                        var transitionStatus = areaTransitionCoroutine?.IsDone == false ? "Running" : "Stopped";
+                        var pausedStatus = processingPaused ? " (PAUSED)" : "";
+                        
+                        Graphics.DrawText($"Main Coroutine: {mainStatus}{pausedStatus}", new Vector2(x, startY), 
+                            mainProcessingCoroutine?.IsDone == false ? Color.Green : Color.Red);
+                        startY += lineHeight;
+                        
+                        if (isTransitioning)
+                        {
+                            Graphics.DrawText($"Transition Coroutine: {transitionStatus}", new Vector2(x, startY), 
+                                areaTransitionCoroutine?.IsDone == false ? Color.Yellow : Color.Red);
+                            startY += lineHeight;
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -1016,6 +1228,9 @@ namespace RadarMovement
         {
             try
             {
+                // Stop all coroutines
+                StopAllCoroutines();
+                
                 // Clean up LineOfSight system
                 lineOfSight?.ClearDebugData();
                 lineOfSight = null;
@@ -1027,12 +1242,46 @@ namespace RadarMovement
                 taskQueue?.Clear();
                 currentTask = null;
                 
-                AddDebugMessage("RadarMovement plugin closed");
+                AddDebugMessage("RadarMovement plugin closed with coroutine cleanup");
                 base.OnClose();
             }
             catch (Exception ex)
             {
                 LogError($"Error during plugin shutdown: {ex.Message}");
+            }
+        }
+
+        private void StopAllCoroutines()
+        {
+            try
+            {
+                // Stop main processing coroutine
+                if (mainProcessingCoroutine != null)
+                {
+                    var mainCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
+                    if (mainCoroutine != null)
+                    {
+                        mainCoroutine.Done = true;
+                    }
+                    mainProcessingCoroutine = null;
+                }
+
+                // Stop area transition coroutine
+                if (areaTransitionCoroutine != null)
+                {
+                    var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
+                    if (transitionCoroutine != null)
+                    {
+                        transitionCoroutine.Done = true;
+                    }
+                    areaTransitionCoroutine = null;
+                }
+
+                AddDebugMessage("All coroutines stopped");
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error stopping coroutines: {ex.Message}");
             }
         }
     }
