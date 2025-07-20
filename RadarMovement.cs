@@ -262,7 +262,7 @@ namespace RadarMovement
                     var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
                     if (transitionCoroutine != null)
                     {
-                        transitionCoroutine.Done = true;
+                        transitionCoroutine.Done();
                     }
                 }
 
@@ -383,8 +383,8 @@ namespace RadarMovement
                         var priority = 10 - i; // Earlier waypoints get higher priority
                         
                         var task = new RadarTask(
-                            worldPosition: waypoint,
-                            screenPosition: screenPos,
+                            worldPosition: new SharpDX.Vector3(waypoint.X, waypoint.Y, waypoint.Z),
+                            screenPosition: new SharpDX.Vector2(screenPos.X, screenPos.Y),
                             type: taskType,
                             priority: priority
                         )
@@ -419,7 +419,7 @@ namespace RadarMovement
                     var existingCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
                     if (existingCoroutine != null)
                     {
-                        existingCoroutine.Done = true;
+                        existingCoroutine.Done();
                     }
                 }
 
@@ -883,7 +883,7 @@ namespace RadarMovement
                     task.RecordAttempt();
                     
                     // Perform the click
-                    Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
+                    Input.SetCursorPos(new SharpDX.Vector2(screenPos.X, screenPos.Y));
                     Input.LeftDown();
                     Input.LeftUp();
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
@@ -957,7 +957,7 @@ namespace RadarMovement
 
                 if (IsValidScreenPosition(screenPos))
                 {
-                    Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
+                    Input.SetCursorPos(new SharpDX.Vector2(screenPos.X, screenPos.Y));
                     Input.LeftDown();
                     Input.LeftUp();
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
@@ -1376,11 +1376,11 @@ namespace RadarMovement
                     // Show terrain analysis for current task
                     if (currentTask != null)
                     {
-                        var taskTerrainInfo = lineOfSight.GetTerrainInfo(currentTask.WorldPosition);
+                        var taskTerrainInfo = lineOfSight.GetTerrainInfo(new Vector2(currentTask.WorldPosition.X, currentTask.WorldPosition.Y));
                         Graphics.DrawText($"Target: {taskTerrainInfo}", new Vector2(x, startY), Color.Yellow);
                         startY += lineHeight;
 
-                        var pathStatus = lineOfSight.CheckPath(playerPos2D, currentTask.WorldPosition);
+                        var pathStatus = lineOfSight.CheckPath(playerPos2D, new Vector2(currentTask.WorldPosition.X, currentTask.WorldPosition.Y));
                         Graphics.DrawText($"Path: {pathStatus}", new Vector2(x, startY), GetPathStatusColor(pathStatus));
                         startY += lineHeight;
                     }
@@ -1459,7 +1459,7 @@ namespace RadarMovement
                         DrawArrow(currentScreenPos, nextScreenPos, pathColor, 8f);
 
                         // Draw waypoint numbers
-                        Graphics.DrawText($"{i + 1}", new System.Numerics.Vector2(currentScreenPos.X - 5, currentScreenPos.Y - 20), 
+                        Graphics.DrawText($"{i + 1}", new SharpDX.Vector2(currentScreenPos.X - 5, currentScreenPos.Y - 20), 
                             pathColor);
                     }
                 }
@@ -1504,7 +1504,7 @@ namespace RadarMovement
                     // Draw waypoint name
                     if (!string.IsNullOrEmpty(waypoint.Name))
                     {
-                        Graphics.DrawText(waypoint.Name, new System.Numerics.Vector2(screenPos.X, screenPos.Y - radius - 15), 
+                        Graphics.DrawText(waypoint.Name, new SharpDX.Vector2(screenPos.X, screenPos.Y - radius - 15), 
                             color);
                     }
 
@@ -1622,7 +1622,7 @@ namespace RadarMovement
                     var mainCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
                     if (mainCoroutine != null)
                     {
-                        mainCoroutine.Done = true;
+                        mainCoroutine.Done();
                     }
                     mainProcessingCoroutine = null;
                 }
@@ -1633,7 +1633,7 @@ namespace RadarMovement
                     var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
                     if (transitionCoroutine != null)
                     {
-                        transitionCoroutine.Done = true;
+                        transitionCoroutine.Done();
                     }
                     areaTransitionCoroutine = null;
                 }
