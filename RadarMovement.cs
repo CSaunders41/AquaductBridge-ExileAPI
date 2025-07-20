@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using ExileCore;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
@@ -203,11 +204,11 @@ namespace RadarMovement
             }
         }
 
-        public override void AreaChange()
+        public override void AreaChange(AreaInstance area)
         {
             try
             {
-                var newArea = GameController.Area?.CurrentArea?.DisplayName ?? "Unknown";
+                var newArea = area?.DisplayName ?? "Unknown";
                 var previousArea = currentArea;
                 currentArea = newArea;
                 lastAreaChange = DateTime.Now;
@@ -241,7 +242,7 @@ namespace RadarMovement
                         ResumeProcessing("Recovery from unexpected area change"));
                 }
 
-                base.AreaChange();
+                base.AreaChange(area);
             }
             catch (Exception ex)
             {
