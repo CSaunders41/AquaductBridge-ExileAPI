@@ -18,6 +18,7 @@
     <Compile Include="RadarMovement.cs" />
     <Compile Include="RadarTask.cs" />
     <Compile Include="Utils/EventBus.cs" />
+    <Compile Include="Utils/LineOfSight.cs" />
   </ItemGroup>
 
   <ItemGroup>

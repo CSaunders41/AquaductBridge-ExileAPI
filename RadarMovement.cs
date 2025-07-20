@@ -75,6 +75,15 @@ namespace RadarMovement
         
         [Menu("Show Performance Stats")]
         public ToggleNode ShowPerformance { get; set; } = new ToggleNode(false);
+        
+        [Menu("Show Terrain Analysis")]
+        public ToggleNode ShowTerrain { get; set; } = new ToggleNode(false);
+        
+        [Menu("Show Path Rays")]
+        public ToggleNode ShowPathRays { get; set; } = new ToggleNode(false);
+        
+        [Menu("Terrain Check Range")]
+        public RangeNode<float> TerrainCheckRange { get; set; } = new RangeNode<float>(100f, 50f, 300f);
     }
 
     public class RadarMovement : BaseSettingsPlugin<RadarMovementSettings>
@@ -82,6 +91,9 @@ namespace RadarMovement
         // Task-based system
         private readonly Queue<RadarTask> taskQueue = new Queue<RadarTask>();
         private RadarTask currentTask = null;
+        
+        // Terrain analysis system
+        private LineOfSight lineOfSight = null;
         
         // Timing and state management
         private DateTime lastTaskScan = DateTime.MinValue;
@@ -94,6 +106,7 @@ namespace RadarMovement
         private DateTime lastPerformanceCheck = DateTime.MinValue;
         private int tasksCompletedThisSession = 0;
         private int tasksFailedThisSession = 0;
+        private int targetsFilteredByTerrain = 0;
         
         // State tracking
         private bool isTransitioning = false;
@@ -104,6 +117,9 @@ namespace RadarMovement
         {
             try
             {
+                // Initialize LineOfSight system
+                lineOfSight = new LineOfSight(GameController);
+                
                 // Subscribe to EventBus events
                 var eventBus = EventBus.Instance;
                 eventBus.Subscribe<AreaChangeEvent>(OnAreaChange);
@@ -112,8 +128,8 @@ namespace RadarMovement
                 eventBus.Subscribe<TaskCompletedEvent>(OnTaskCompleted);
                 eventBus.Subscribe<PlayerStuckEvent>(OnPlayerStuck);
 
-                AddDebugMessage("RadarMovement initialized with EventBus integration");
-                LogMessage("RadarMovement v2.0 - Task-based system initialized");
+                AddDebugMessage("RadarMovement initialized with EventBus integration and LineOfSight");
+                LogMessage("RadarMovement v2.1 - Task-based system with terrain analysis initialized");
                 
                 return true;
             }
@@ -306,8 +322,30 @@ namespace RadarMovement
                 if (HasTaskForEntity(entity))
                     continue;
 
+                // Check terrain accessibility (critical for Aqueduct navigation)
+                var targetPos = new Vector2(entity.GridPos.X, entity.GridPos.Y);
+                var pathStatus = lineOfSight?.CheckPath(playerPos2D, targetPos) ?? PathStatus.Clear;
+                
+                if (pathStatus == PathStatus.Blocked)
+                {
+                    targetsFilteredByTerrain++;
+                    if (Settings.Debug.DetailedLogs.Value)
+                    {
+                        AddDebugMessage($"Filtered blocked target: {taskType} at {targetPos}");
+                    }
+                    continue;
+                }
+
+                // For dashable obstacles, we can still reach them but with lower priority
+                var priorityModifier = pathStatus == PathStatus.Dashable ? -10 : 0;
+
                 // Create new task
                 var task = new RadarTask(entity, taskType.Value, Settings.Movement.CompletionDistance.Value);
+                task.Priority += priorityModifier; // Reduce priority for dashable targets
+                
+                // Add terrain analysis metadata
+                task.Metadata += $" | Terrain: {pathStatus}";
+                
                 newTasks.Add(task);
 
                 // Publish target found event
@@ -495,8 +533,31 @@ namespace RadarMovement
         {
             try
             {
+                var targetWorldPos = task.WorldPosition;
+                
+                // Check if we need to find an alternate route
+                var pathStatus = lineOfSight?.CheckPath(playerPos, targetWorldPos) ?? PathStatus.Clear;
+                Vector2 actualTarget = targetWorldPos;
+
+                if (pathStatus == PathStatus.Blocked)
+                {
+                    // Try to find a walkable position closer to the target
+                    var alternatePos = lineOfSight?.FindClosestWalkablePosition(targetWorldPos, Settings.Debug.TerrainCheckRange.Value);
+                    if (alternatePos.HasValue)
+                    {
+                        actualTarget = alternatePos.Value;
+                        AddDebugMessage($"Using alternate route: blocked -> walkable at {actualTarget}");
+                    }
+                    else
+                    {
+                        AddDebugMessage($"No alternate route found for blocked target");
+                        task.RecordAttempt(); // Count this as an attempt since we couldn't find a route
+                        return;
+                    }
+                }
+
                 var camera = GameController.IngameState.Camera;
-                var targetPos3D = new Vector3(task.WorldPosition.X, task.WorldPosition.Y, 0);
+                var targetPos3D = new Vector3(actualTarget.X, actualTarget.Y, 0);
                 var screenPos = camera.WorldToScreen(targetPos3D);
 
                 if (IsValidScreenPosition(screenPos))
@@ -510,7 +571,8 @@ namespace RadarMovement
                     lastPlayerPosition = playerPos;
                     lastPositionUpdate = DateTime.Now;
 
-                    AddDebugMessage($"Moving towards: {task.Type} at distance {task.GetDistanceFrom(playerPos):F1}");
+                    var statusInfo = pathStatus != PathStatus.Clear ? $" ({pathStatus})" : "";
+                    AddDebugMessage($"Moving towards: {task.Type} at distance {task.GetDistanceFrom(playerPos):F1}{statusInfo}");
                 }
             }
             catch (Exception ex)
@@ -616,7 +678,7 @@ namespace RadarMovement
                 var totalTasks = tasksCompletedThisSession + tasksFailedThisSession;
                 var successRate = totalTasks > 0 ? (float)tasksCompletedThisSession / totalTasks * 100f : 0f;
                 
-                AddDebugMessage($"Performance: {tasksCompletedThisSession}/{totalTasks} tasks ({successRate:F1}% success)");
+                AddDebugMessage($"Performance: {tasksCompletedThisSession}/{totalTasks} tasks ({successRate:F1}% success), {targetsFilteredByTerrain} filtered by terrain");
             }
         }
 
@@ -664,6 +726,17 @@ namespace RadarMovement
                 if (Settings.Visual.ShowTargetMarker.Value && currentTask != null)
                 {
                     DrawTargetMarker(currentTask);
+                }
+
+                // Terrain analysis visualization
+                if (Settings.Debug.ShowPathRays.Value && lineOfSight != null)
+                {
+                    DrawLineOfSightRays();
+                }
+
+                if (Settings.Debug.ShowTerrain.Value && GameController.Player != null)
+                {
+                    DrawTerrainAnalysis();
                 }
             }
             catch (Exception ex)
@@ -818,8 +891,108 @@ namespace RadarMovement
                 return Color.LightGreen;
             if (message.Contains("EventBus"))
                 return Color.Cyan;
+            if (message.Contains("Terrain") || message.Contains("alternate"))
+                return Color.Yellow;
             
             return Color.White;
+        }
+
+        private void DrawLineOfSightRays()
+        {
+            try
+            {
+                var debugRays = lineOfSight?.GetDebugRays();
+                if (debugRays == null || debugRays.Count == 0)
+                    return;
+
+                var camera = GameController.IngameState.Camera;
+
+                foreach (var (start, end, status) in debugRays)
+                {
+                    var startPos3D = new Vector3(start.X, start.Y, 0);
+                    var endPos3D = new Vector3(end.X, end.Y, 0);
+                    
+                    var startScreen = camera.WorldToScreen(startPos3D);
+                    var endScreen = camera.WorldToScreen(endPos3D);
+
+                    if (IsValidScreenPosition(startScreen) && IsValidScreenPosition(endScreen))
+                    {
+                        var rayColor = status switch
+                        {
+                            PathStatus.Clear => Color.Green,
+                            PathStatus.Dashable => Color.Yellow,
+                            PathStatus.Blocked => Color.Red,
+                            PathStatus.Invalid => Color.Gray,
+                            _ => Color.White
+                        };
+
+                        Graphics.DrawLine(startScreen, endScreen, 1, rayColor);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error drawing LineOfSight rays: {ex.Message}");
+            }
+        }
+
+        private void DrawTerrainAnalysis()
+        {
+            try
+            {
+                var playerPos = GameController.Player.GridPos;
+                var playerPos2D = new Vector2(playerPos.X, playerPos.Y);
+                
+                // Show terrain info at player position and nearby area
+                var startY = 350;
+                var lineHeight = 16;
+                var x = 10;
+
+                Graphics.DrawText("Terrain Analysis:", new Vector2(x, startY), Color.Cyan);
+                startY += lineHeight + 5;
+
+                if (lineOfSight != null)
+                {
+                    var playerTerrainInfo = lineOfSight.GetTerrainInfo(playerPos2D);
+                    Graphics.DrawText($"Player: {playerTerrainInfo}", new Vector2(x, startY), Color.White);
+                    startY += lineHeight;
+
+                    var areaDimensions = lineOfSight.GetAreaDimensions();
+                    Graphics.DrawText($"Area: {areaDimensions.X} x {areaDimensions.Y}", new Vector2(x, startY), Color.Gray);
+                    startY += lineHeight;
+
+                    // Show terrain analysis for current task
+                    if (currentTask != null)
+                    {
+                        var taskTerrainInfo = lineOfSight.GetTerrainInfo(currentTask.WorldPosition);
+                        Graphics.DrawText($"Target: {taskTerrainInfo}", new Vector2(x, startY), Color.Yellow);
+                        startY += lineHeight;
+
+                        var pathStatus = lineOfSight.CheckPath(playerPos2D, currentTask.WorldPosition);
+                        Graphics.DrawText($"Path: {pathStatus}", new Vector2(x, startY), GetPathStatusColor(pathStatus));
+                        startY += lineHeight;
+                    }
+
+                    // Show filtered targets count
+                    Graphics.DrawText($"Filtered by terrain: {targetsFilteredByTerrain}", new Vector2(x, startY), Color.Orange);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error drawing terrain analysis: {ex.Message}");
+            }
+        }
+
+        private Color GetPathStatusColor(PathStatus status)
+        {
+            return status switch
+            {
+                PathStatus.Clear => Color.Green,
+                PathStatus.Dashable => Color.Yellow,
+                PathStatus.Blocked => Color.Red,
+                PathStatus.Invalid => Color.Gray,
+                _ => Color.White
+            };
         }
 
         #endregion
@@ -843,6 +1016,10 @@ namespace RadarMovement
         {
             try
             {
+                // Clean up LineOfSight system
+                lineOfSight?.ClearDebugData();
+                lineOfSight = null;
+                
                 // Unsubscribe from events to prevent memory leaks
                 EventBus.Instance?.Clear();
                 
