@@ -156,7 +156,7 @@ namespace RadarMovement.Utils
         {
             // Force terrain refresh on area change
             _terrainData = null;
-            _areaDimensions = Vector2i.Zero;
+            _areaDimensions = new GameOffsets.Native.Vector2i();
             _lastTerrainRefresh = DateTime.MinValue;
             
             RefreshTerrainDataIfNeeded();
@@ -373,7 +373,13 @@ namespace RadarMovement.Utils
 
         public Vector2i GetAreaDimensions()
         {
-            return _areaDimensions;
+            return new Vector2i(_areaDimensions.X, _areaDimensions.Y);
+        }
+
+        public byte[,] GetTerrainData()
+        {
+            RefreshTerrainDataIfNeeded();
+            return _terrainData;
         }
 
         #endregion

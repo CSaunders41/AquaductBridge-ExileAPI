@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ExileCore;
 using ExileCore.PoEMemory.Components;
@@ -10,6 +11,7 @@ using ExileCore.Shared;
 using ExileCore.Shared.Attributes;
 using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
+using ExileCore.Shared.Enums;
 using SharpDX;
 using Vector2 = System.Numerics.Vector2;
 using Vector3 = System.Numerics.Vector3;
@@ -369,11 +371,11 @@ namespace RadarMovement
                 for (int i = 0; i < waypointsToAdd; i++)
                 {
                     var waypoint = pathResult.WorldPath[i];
-                    var screenPos = Camera.WorldToScreen(waypoint);
+                    var screenPos = GameController.IngameState.Camera.WorldToScreen(waypoint);
                     
                     if (screenPos != Vector2.Zero)
                     {
-                        var taskType = (i == waypointsToAdd - 1) ? RadarTaskType.ClickTarget : RadarTaskType.ClickWaypoint;
+                        var taskType = (i == waypointsToAdd - 1) ? RadarTaskType.ClickWaypoint : RadarTaskType.MoveToPosition;
                         var priority = 10 - i; // Earlier waypoints get higher priority
                         
                         var task = new RadarTask(
@@ -428,30 +430,37 @@ namespace RadarMovement
         {
             while (true)
             {
+                // ========================================
+                // SECTION 1: SAFETY CHECKS
+                // ========================================
+                if (!Settings.Enable.Value || 
+                    !GameController.InGame || 
+                    GameController.Player == null || 
+                    !GameController.Player.IsAlive ||
+                    GameController.IsLoading ||
+                    processingPaused)
+                {
+                    yield return new WaitTime(100);
+                    continue;
+                }
+
+                // ========================================
+                // SECTION 2: PERFORMANCE STATS UPDATE
+                // ========================================
                 try
                 {
-                    // ========================================
-                    // SECTION 1: SAFETY CHECKS
-                    // ========================================
-                    if (!Settings.Enable.Value || 
-                        !GameController.InGame || 
-                        GameController.Player == null || 
-                        !GameController.Player.IsAlive ||
-                        GameController.IsLoading ||
-                        processingPaused)
-                    {
-                        yield return new WaitTime(100);
-                        continue;
-                    }
-
-                    // ========================================
-                    // SECTION 2: PERFORMANCE STATS UPDATE
-                    // ========================================
                     UpdatePerformanceStats();
+                }
+                catch (Exception ex)
+                {
+                    LogError($"Error updating performance stats: {ex.Message}");
+                }
 
-                    // ========================================
-                    // SECTION 3: TASK QUEUE PROCESSING
-                    // ========================================
+                // ========================================
+                // SECTION 3: TASK QUEUE PROCESSING
+                // ========================================
+                try
+                {
                     if (!isTransitioning) // Don't process tasks during area transitions
                     {
                         ProcessTaskQueue();
@@ -461,19 +470,18 @@ namespace RadarMovement
                         // During transitions, just clean up invalid tasks
                         CleanupTaskQueue();
                     }
-
-                    // ========================================
-                    // SECTION 4: WAIT FOR NEXT CYCLE
-                    // ========================================
-                    var waitTime = isTransitioning ? 200 : Settings.Movement.MovementDelay.Value;
-                    yield return new WaitTime(waitTime);
                 }
                 catch (Exception ex)
                 {
-                    LogError($"Error in main processing coroutine: {ex.Message}");
-                    AddDebugMessage($"Main coroutine error: {ex.Message}");
-                    yield return new WaitTime(1000); // Wait longer on errors
+                    LogError($"Error processing task queue: {ex.Message}");
+                    AddDebugMessage($"Task queue error: {ex.Message}");
                 }
+
+                // ========================================
+                // SECTION 4: WAIT FOR NEXT CYCLE
+                // ========================================
+                var waitTime = isTransitioning ? 200 : Settings.Movement.MovementDelay.Value;
+                yield return new WaitTime(waitTime);
             }
         }
 
@@ -487,38 +495,39 @@ namespace RadarMovement
 
             while (stopwatch.ElapsedMilliseconds < timeoutMs)
             {
+                // Check if we're in the expected area
+                var currentAreaName = "Unknown";
+                var gameStable = false;
+                
                 try
                 {
-                    // Check if we're in the expected area
-                    var currentAreaName = GameController.Area?.CurrentArea?.DisplayName ?? "Unknown";
-                    
-                    if (!string.IsNullOrEmpty(expectedDestinationArea) && 
-                        currentAreaName.Contains(expectedDestinationArea.Split('/')[0]) || // Handle area variations
-                        currentAreaName == expectedDestinationArea)
-                    {
-                        // Successfully reached expected destination
-                        AddDebugMessage($"Transition successful: Now in {currentAreaName}");
-                        areaTransitionsThisSession++;
-                        break;
-                    }
-
-                    // Check if game is stable (not loading, player exists)
-                    if (GameController.InGame && 
-                        GameController.Player != null && 
-                        !GameController.IsLoading)
-                    {
-                        // Game is stable but might be unexpected area - continue anyway
-                        AddDebugMessage($"Game stable in area: {currentAreaName}");
-                        break;
-                    }
-
-                    yield return new WaitTime(CHECK_INTERVAL_MS);
+                    currentAreaName = GameController.Area?.CurrentArea?.DisplayName ?? "Unknown";
+                    gameStable = GameController.InGame && GameController.Player != null && !GameController.IsLoading;
                 }
                 catch (Exception ex)
                 {
-                    LogError($"Error in grace period: {ex.Message}");
-                    yield return new WaitTime(CHECK_INTERVAL_MS);
+                    LogError($"Error checking game state in grace period: {ex.Message}");
                 }
+                
+                if (!string.IsNullOrEmpty(expectedDestinationArea) && 
+                    currentAreaName.Contains(expectedDestinationArea.Split('/')[0]) || // Handle area variations
+                    currentAreaName == expectedDestinationArea)
+                {
+                    // Successfully reached expected destination
+                    AddDebugMessage($"Transition successful: Now in {currentAreaName}");
+                    areaTransitionsThisSession++;
+                    break;
+                }
+
+                // Check if game is stable (not loading, player exists)
+                if (gameStable)
+                {
+                    // Game is stable but might be unexpected area - continue anyway
+                    AddDebugMessage($"Game stable in area: {currentAreaName}");
+                    break;
+                }
+
+                yield return new WaitTime(CHECK_INTERVAL_MS);
             }
 
             // Grace period complete - resume normal processing
@@ -659,12 +668,12 @@ namespace RadarMovement
 
                 // Check terrain accessibility (critical for Aqueduct navigation)
                 var targetPos = new Vector2(entity.GridPos.X, entity.GridPos.Y);
-                var targetWorld = new Vector3(entity.GridPos.X, entity.GridPos.Y, entity.GridPos.Z);
+                var targetWorld = new Vector3(entity.GridPos.X, entity.GridPos.Y, 0f);
                 var pathStatus = lineOfSight?.CheckPath(playerPos2D, targetPos) ?? PathStatus.Clear;
                 
                 // Advanced pathfinding for blocked or complex routes
                 if (pathStatus == PathStatus.Blocked && pathfinderInitialized && 
-                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, playerPos.Z), targetWorld))
+                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, 0f), targetWorld))
                 {
                     // Try pathfinding for blocked targets
                     var pathResult = FindPathToTargetAsync(targetWorld).Result;
@@ -703,7 +712,7 @@ namespace RadarMovement
 
                 // Check if we should use pathfinding even for clear paths (long distance optimization)
                 if (pathStatus == PathStatus.Clear && pathfinderInitialized && 
-                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, playerPos.Z), targetWorld) &&
+                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, 0f), targetWorld) &&
                     Settings.Pathfinding.UseWaypointNavigation.Value)
                 {
                     var pathResult = FindPathToTargetAsync(targetWorld).Result;
@@ -866,10 +875,9 @@ namespace RadarMovement
                     task.RecordAttempt();
                     
                     // Perform the click
-                    Input.SetCursorPos(screenPos);
-                    Mouse.LeftDown();
+                    Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
+                    Input.Click(MouseButtons.Left);
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
-                    Mouse.LeftUp();
 
                     lastMovement = DateTime.Now;
 
@@ -940,10 +948,9 @@ namespace RadarMovement
 
                 if (IsValidScreenPosition(screenPos))
                 {
-                    Input.SetCursorPos(screenPos);
-                    Mouse.LeftDown();
+                    Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
+                    Input.Click(MouseButtons.Left);
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
-                    Mouse.LeftUp();
 
                     lastMovement = DateTime.Now;
                     lastPlayerPosition = playerPos;
@@ -1056,7 +1063,7 @@ namespace RadarMovement
                 var totalTasks = tasksCompletedThisSession + tasksFailedThisSession;
                 var successRate = totalTasks > 0 ? (float)tasksCompletedThisSession / totalTasks * 100f : 0f;
                 
-                var coroutineStatus = mainProcessingCoroutine?.IsDone == false ? "Running" : "Stopped";
+                var coroutineStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? "Running" : "Stopped";
                 var processingStatus = processingPaused ? "Paused" : "Active";
                 var transitionStatus = isTransitioning ? $"Transitioning to {expectedDestinationArea}" : "Stable";
                 
@@ -1375,18 +1382,18 @@ namespace RadarMovement
                     // Show coroutine status if enabled
                     if (Settings.Debug.ShowCoroutineStatus.Value)
                     {
-                        var mainStatus = mainProcessingCoroutine?.IsDone == false ? "Running" : "Stopped";
-                        var transitionStatus = areaTransitionCoroutine?.IsDone == false ? "Running" : "Stopped";
+                                        var mainStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? "Running" : "Stopped";
+                var transitionStatus = (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone()) ? "Running" : "Stopped";
                         var pausedStatus = processingPaused ? " (PAUSED)" : "";
                         
                         Graphics.DrawText($"Main Coroutine: {mainStatus}{pausedStatus}", new Vector2(x, startY), 
-                            mainProcessingCoroutine?.IsDone == false ? Color.Green : Color.Red);
+                            (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? Color.Green : Color.Red);
                         startY += lineHeight;
                         
                         if (isTransitioning)
                         {
                             Graphics.DrawText($"Transition Coroutine: {transitionStatus}", new Vector2(x, startY), 
-                                areaTransitionCoroutine?.IsDone == false ? Color.Yellow : Color.Red);
+                                (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone()) ? Color.Yellow : Color.Red);
                             startY += lineHeight;
                         }
                     }
@@ -1420,7 +1427,7 @@ namespace RadarMovement
                 var pathfindingTasks = taskQueue.Where(t => t.IsPathfindingWaypoint).ToList();
                 if (pathfindingTasks.Count == 0) return;
 
-                var playerScreenPos = Camera.WorldToScreen(GameController.Player.Pos);
+                var playerScreenPos = GameController.IngameState.Camera.WorldToScreen(GameController.Player.Pos);
                 var pathColor = Settings.Pathfinding.PathLineColor.Value;
 
                 // Group pathfinding tasks by their path sequence
@@ -1429,8 +1436,8 @@ namespace RadarMovement
                     var currentTask = pathfindingTasks[i];
                     var nextTask = pathfindingTasks[i + 1];
 
-                    var currentScreenPos = Camera.WorldToScreen(currentTask.WorldPosition);
-                    var nextScreenPos = Camera.WorldToScreen(nextTask.WorldPosition);
+                    var currentScreenPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(currentTask.WorldPosition.X, currentTask.WorldPosition.Y, 0));
+                    var nextScreenPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(nextTask.WorldPosition.X, nextTask.WorldPosition.Y, 0));
 
                     if (currentScreenPos != Vector2.Zero && nextScreenPos != Vector2.Zero)
                     {
@@ -1442,15 +1449,15 @@ namespace RadarMovement
                         DrawArrow(currentScreenPos, nextScreenPos, pathColor, 8f);
 
                         // Draw waypoint numbers
-                        Graphics.DrawText($"{i + 1}", currentScreenPos + new Vector2(-5, -20), 
-                            pathColor, FontAlign.Center);
+                        Graphics.DrawText($"{i + 1}", new System.Numerics.Vector2(currentScreenPos.X - 5, currentScreenPos.Y - 20), 
+                            pathColor);
                     }
                 }
 
                 // Draw line from player to first pathfinding waypoint
                 if (pathfindingTasks.Count > 0 && playerScreenPos != Vector2.Zero)
                 {
-                    var firstTaskPos = Camera.WorldToScreen(pathfindingTasks[0].WorldPosition);
+                    var firstTaskPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(pathfindingTasks[0].WorldPosition.X, pathfindingTasks[0].WorldPosition.Y, 0));
                     if (firstTaskPos != Vector2.Zero)
                     {
                         Graphics.DrawLine(playerScreenPos, firstTaskPos, 2, Color.White);
@@ -1474,7 +1481,7 @@ namespace RadarMovement
 
                 foreach (var waypoint in waypoints)
                 {
-                    var screenPos = Camera.WorldToScreen(waypoint.WorldPosition);
+                    var screenPos = GameController.IngameState.Camera.WorldToScreen(waypoint.WorldPosition);
                     if (screenPos == Vector2.Zero) continue;
 
                     // Draw waypoint circle with color based on type
@@ -1487,18 +1494,18 @@ namespace RadarMovement
                     // Draw waypoint name
                     if (!string.IsNullOrEmpty(waypoint.Name))
                     {
-                        Graphics.DrawText(waypoint.Name, screenPos + new Vector2(0, -radius - 15), 
-                            color, FontAlign.Center);
+                        Graphics.DrawText(waypoint.Name, new System.Numerics.Vector2(screenPos.X, screenPos.Y - radius - 15), 
+                            color);
                     }
 
                     // Draw connections to other waypoints
                     foreach (var connected in waypoint.ConnectedWaypoints)
                     {
-                        var connectedScreenPos = Camera.WorldToScreen(connected.WorldPosition);
+                        var connectedScreenPos = GameController.IngameState.Camera.WorldToScreen(connected.WorldPosition);
                         if (connectedScreenPos != Vector2.Zero)
                         {
                             Graphics.DrawLine(screenPos, connectedScreenPos, 1, 
-                                Color.Gray.ToArgb() | 0x80000000); // Semi-transparent
+                                Color.Gray); // Semi-transparent
                         }
                     }
                 }
@@ -1605,7 +1612,7 @@ namespace RadarMovement
                     var mainCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
                     if (mainCoroutine != null)
                     {
-                        mainCoroutine.Done = true;
+                        mainCoroutine.Done();
                     }
                     mainProcessingCoroutine = null;
                 }
@@ -1616,7 +1623,7 @@ namespace RadarMovement
                     var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
                     if (transitionCoroutine != null)
                     {
-                        transitionCoroutine.Done = true;
+                        transitionCoroutine.Done();
                     }
                     areaTransitionCoroutine = null;
                 }

@@ -16,6 +16,8 @@ namespace RadarMovement.Utils
         public int X { get; }
         public int Y { get; }
         
+        public static Vector2i Zero => new Vector2i(0, 0);
+        
         public Vector2i(int x, int y)
         {
             X = x;

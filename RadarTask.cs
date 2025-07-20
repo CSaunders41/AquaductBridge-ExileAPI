@@ -81,6 +81,11 @@ namespace RadarMovement
         /// </summary>
         public bool IsPathfindingWaypoint { get; set; } = false;
 
+        /// <summary>
+        /// Description of the task for debugging and display
+        /// </summary>
+        public string Description { get; set; } = "";
+
         public RadarTask(Vector2 position, RadarTaskType type, float completionDistance = 30f)
         {
             WorldPosition = position;
@@ -106,6 +111,23 @@ namespace RadarMovement
             {
                 ExpectedDestination = DetermineDestination(entity);
             }
+        }
+
+        /// <summary>
+        /// Constructor for pathfinding waypoint tasks
+        /// </summary>
+        public RadarTask(Vector3 worldPosition, Vector2 screenPosition, RadarTaskType type, int priority, float completionDistance = 30f)
+        {
+            WorldPosition = new Vector2(worldPosition.X, worldPosition.Y);
+            Type = type;
+            CompletionDistance = completionDistance;
+            Priority = priority;
+            MaxAttempts = GetDefaultMaxAttempts(type);
+            CreatedTime = DateTime.Now;
+            LastAttemptTime = DateTime.MinValue;
+            AttemptCount = 0;
+            IsCompleted = false;
+            IsFailed = false;
         }
 
         /// <summary>
