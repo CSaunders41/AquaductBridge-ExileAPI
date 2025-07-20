@@ -1,0 +1,59 @@
+# AqueductBridge Deployment Package
+Generated: 2025-07-20 20:13:33
+
+## CRITICAL FIX: Coordinate Inversion for Backwards Movement
+
+The bot was running backwards due to coordinate inversion. This package includes fixes:
+
+### Quick Fix for Backwards Movement:
+1. The coordinate system now has `invert_y=True` by default
+2. Use `debug_coordinate_fixes.py` to test different combinations
+3. Most common fix: Y-axis needs to be inverted
+
+## Deployment Instructions:
+
+### 1. Deploy ExileAPI Plugin:
+```bash
+# Copy the AqueductBridge/ folder to:
+ExileApi-Compiled/Plugins/Source/AqueductBridge/
+
+# Or copy the compiled DLL to:
+ExileApi-Compiled/Plugins/Compiled/AqueductBridge.dll
+```
+
+### 2. Setup Python Automation:
+```bash
+# Extract Python_Automation/ to any directory
+cd Python_Automation
+pip install -r requirements.txt
+```
+
+### 3. Test Coordinate Fixes:
+```bash
+# Run this FIRST to diagnose coordinate issues:
+python debug_coordinate_fixes.py
+
+# Then run normal automation:
+python start_automation.py
+```
+
+## Troubleshooting Backwards Movement:
+
+If bot still runs backwards:
+1. Run `debug_coordinate_fixes.py`
+2. Test different coordinate fixes (option 2 is usually correct)
+3. Option 2 (invert_y) should fix most backwards movement issues
+
+## Common Coordinate Fixes:
+- `invert_y=True` - Fixes moving up instead of down (MOST COMMON)
+- `invert_x=True` - Fixes moving left instead of right  
+- `swap_xy=True` - Fixes if X and Y are swapped
+
+## Testing:
+1. Load Path of Exile (Windowed mode)
+2. Start ExileAPI with AqueductBridge enabled
+3. Enter any area (Aqueducts recommended)
+4. Run `debug_coordinate_fixes.py` to find correct settings
+5. Run `start_automation.py` with fixed coordinates
+
+The coordinate fix is already set to `invert_y=True` which should fix the backwards movement issue.
