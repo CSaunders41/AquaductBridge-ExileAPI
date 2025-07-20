@@ -57,7 +57,7 @@ namespace RadarMovement.Utils
         public AqueductWaypoint(Vector3 worldPos, string name, TerrainType type = TerrainType.Waypoint)
         {
             WorldPosition = worldPos;
-            GridPosition = WorldToGrid(worldPos);
+            GridPosition = AqueductPathfinder.WorldToGrid(worldPos);
             Name = name;
             Type = type;
         }

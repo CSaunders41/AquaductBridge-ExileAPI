@@ -156,7 +156,7 @@ namespace RadarMovement.Utils
         {
             // Force terrain refresh on area change
             _terrainData = null;
-            _areaDimensions = new GameOffsets.Native.Vector2i();
+            _areaDimensions = new GameOffsets.Native.Vector2i(0, 0);
             _lastTerrainRefresh = DateTime.MinValue;
             
             RefreshTerrainDataIfNeeded();
@@ -215,7 +215,7 @@ namespace RadarMovement.Utils
                 // For now, we'll use a basic approach that works with available APIs
                 
                 var terrainInfo = areaData.Terrain;
-                if (terrainInfo != null)
+                if (!ReferenceEquals(terrainInfo, null))
                 {
                     // Try to populate terrain data using available ExileCore APIs
                     PopulateTerrainFromGameData(terrainInfo);
@@ -379,7 +379,20 @@ namespace RadarMovement.Utils
         public byte[,] GetTerrainData()
         {
             RefreshTerrainDataIfNeeded();
-            return _terrainData;
+            
+            if (_terrainData == null)
+                return null;
+                
+            // Convert jagged array to 2D array
+            var result = new byte[_terrainData.Length, _terrainData[0].Length];
+            for (int y = 0; y < _terrainData.Length; y++)
+            {
+                for (int x = 0; x < _terrainData[y].Length; x++)
+                {
+                    result[y, x] = (byte)Math.Max(0, Math.Min(255, _terrainData[y][x]));
+                }
+            }
+            return result;
         }
 
         #endregion

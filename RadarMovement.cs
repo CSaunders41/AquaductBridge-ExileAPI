@@ -259,7 +259,11 @@ namespace RadarMovement
                 // Stop any existing area transition coroutine
                 if (areaTransitionCoroutine != null)
                 {
-                    Core.ParallelRunner.FindByName("RadarMovement_AreaTransition")?.Done = true;
+                    var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
+                    if (transitionCoroutine != null)
+                    {
+                        transitionCoroutine.Done = true;
+                    }
                 }
 
                 // Start new grace period coroutine
@@ -373,7 +377,7 @@ namespace RadarMovement
                     var waypoint = pathResult.WorldPath[i];
                     var screenPos = GameController.IngameState.Camera.WorldToScreen(waypoint);
                     
-                    if (screenPos != Vector2.Zero)
+                    if (screenPos.X != 0 && screenPos.Y != 0)
                     {
                         var taskType = (i == waypointsToAdd - 1) ? RadarTaskType.ClickWaypoint : RadarTaskType.MoveToPosition;
                         var priority = 10 - i; // Earlier waypoints get higher priority
@@ -412,7 +416,11 @@ namespace RadarMovement
                 if (mainProcessingCoroutine != null)
                 {
                     // Stop existing coroutine
-                    Core.ParallelRunner.FindByName("RadarMovement_MainProcessing")?.Done = true;
+                    var existingCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
+                    if (existingCoroutine != null)
+                    {
+                        existingCoroutine.Done = true;
+                    }
                 }
 
                 mainProcessingCoroutine = new Coroutine(MainProcessingCoroutine(), this, "RadarMovement_MainProcessing");
@@ -876,7 +884,8 @@ namespace RadarMovement
                     
                     // Perform the click
                     Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
-                    Input.Click(MouseButtons.Left);
+                    Input.LeftDown();
+                    Input.LeftUp();
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
 
                     lastMovement = DateTime.Now;
@@ -949,7 +958,8 @@ namespace RadarMovement
                 if (IsValidScreenPosition(screenPos))
                 {
                     Input.SetCursorPos(new System.Numerics.Vector2(screenPos.X, screenPos.Y));
-                    Input.Click(MouseButtons.Left);
+                    Input.LeftDown();
+                    Input.LeftUp();
                     // Note: In coroutine context, we don't use Thread.Sleep - timing is handled by coroutine delays
 
                     lastMovement = DateTime.Now;
@@ -1063,7 +1073,7 @@ namespace RadarMovement
                 var totalTasks = tasksCompletedThisSession + tasksFailedThisSession;
                 var successRate = totalTasks > 0 ? (float)tasksCompletedThisSession / totalTasks * 100f : 0f;
                 
-                var coroutineStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? "Running" : "Stopped";
+                var coroutineStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone) ? "Running" : "Stopped";
                 var processingStatus = processingPaused ? "Paused" : "Active";
                 var transitionStatus = isTransitioning ? $"Transitioning to {expectedDestinationArea}" : "Stable";
                 
@@ -1382,18 +1392,18 @@ namespace RadarMovement
                     // Show coroutine status if enabled
                     if (Settings.Debug.ShowCoroutineStatus.Value)
                     {
-                                        var mainStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? "Running" : "Stopped";
-                var transitionStatus = (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone()) ? "Running" : "Stopped";
+                        var mainStatus = (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone) ? "Running" : "Stopped";
+                        var transitionStatus = (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone) ? "Running" : "Stopped";
                         var pausedStatus = processingPaused ? " (PAUSED)" : "";
                         
                         Graphics.DrawText($"Main Coroutine: {mainStatus}{pausedStatus}", new Vector2(x, startY), 
-                            (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone()) ? Color.Green : Color.Red);
+                            (mainProcessingCoroutine != null && !mainProcessingCoroutine.IsDone) ? Color.Green : Color.Red);
                         startY += lineHeight;
                         
                         if (isTransitioning)
                         {
                             Graphics.DrawText($"Transition Coroutine: {transitionStatus}", new Vector2(x, startY), 
-                                (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone()) ? Color.Yellow : Color.Red);
+                                (areaTransitionCoroutine != null && !areaTransitionCoroutine.IsDone) ? Color.Yellow : Color.Red);
                             startY += lineHeight;
                         }
                     }
@@ -1439,7 +1449,7 @@ namespace RadarMovement
                     var currentScreenPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(currentTask.WorldPosition.X, currentTask.WorldPosition.Y, 0));
                     var nextScreenPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(nextTask.WorldPosition.X, nextTask.WorldPosition.Y, 0));
 
-                    if (currentScreenPos != Vector2.Zero && nextScreenPos != Vector2.Zero)
+                    if (currentScreenPos.X != 0 && currentScreenPos.Y != 0 && nextScreenPos.X != 0 && nextScreenPos.Y != 0)
                     {
                         // Draw path segment with varying thickness based on priority
                         var thickness = Math.Max(1, currentTask.Priority / 2);
@@ -1455,10 +1465,10 @@ namespace RadarMovement
                 }
 
                 // Draw line from player to first pathfinding waypoint
-                if (pathfindingTasks.Count > 0 && playerScreenPos != Vector2.Zero)
+                if (pathfindingTasks.Count > 0 && playerScreenPos.X != 0 && playerScreenPos.Y != 0)
                 {
                     var firstTaskPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(pathfindingTasks[0].WorldPosition.X, pathfindingTasks[0].WorldPosition.Y, 0));
-                    if (firstTaskPos != Vector2.Zero)
+                    if (firstTaskPos.X != 0 && firstTaskPos.Y != 0)
                     {
                         Graphics.DrawLine(playerScreenPos, firstTaskPos, 2, Color.White);
                     }
@@ -1482,7 +1492,7 @@ namespace RadarMovement
                 foreach (var waypoint in waypoints)
                 {
                     var screenPos = GameController.IngameState.Camera.WorldToScreen(waypoint.WorldPosition);
-                    if (screenPos == Vector2.Zero) continue;
+                    if (screenPos.X == 0 && screenPos.Y == 0) continue;
 
                     // Draw waypoint circle with color based on type
                     var color = GetWaypointColor(waypoint.Type);
@@ -1502,7 +1512,7 @@ namespace RadarMovement
                     foreach (var connected in waypoint.ConnectedWaypoints)
                     {
                         var connectedScreenPos = GameController.IngameState.Camera.WorldToScreen(connected.WorldPosition);
-                        if (connectedScreenPos != Vector2.Zero)
+                        if (connectedScreenPos.X != 0 && connectedScreenPos.Y != 0)
                         {
                             Graphics.DrawLine(screenPos, connectedScreenPos, 1, 
                                 Color.Gray); // Semi-transparent
@@ -1612,7 +1622,7 @@ namespace RadarMovement
                     var mainCoroutine = Core.ParallelRunner.FindByName("RadarMovement_MainProcessing");
                     if (mainCoroutine != null)
                     {
-                        mainCoroutine.Done();
+                        mainCoroutine.Done = true;
                     }
                     mainProcessingCoroutine = null;
                 }
@@ -1623,7 +1633,7 @@ namespace RadarMovement
                     var transitionCoroutine = Core.ParallelRunner.FindByName("RadarMovement_AreaTransition");
                     if (transitionCoroutine != null)
                     {
-                        transitionCoroutine.Done();
+                        transitionCoroutine.Done = true;
                     }
                     areaTransitionCoroutine = null;
                 }
