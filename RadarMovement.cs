@@ -28,6 +28,9 @@ namespace RadarMovement
         
         [Menu("Debug Settings")]
         public DebugSettingsNode Debug { get; set; } = new DebugSettingsNode();
+        
+        [Menu("Pathfinding")]
+        public PathfindingSettings Pathfinding { get; set; } = new PathfindingSettings();
     }
 
     public class MovementSettingsNode
@@ -93,6 +96,40 @@ namespace RadarMovement
         public RangeNode<int> TransitionTimeout { get; set; } = new RangeNode<int>(10000, 5000, 30000);
     }
 
+    [Submenu]
+    public class PathfindingSettings
+    {
+        [Menu("Enable Advanced Pathfinding")]
+        public ToggleNode EnableAdvancedPathfinding { get; set; } = new ToggleNode(true);
+        
+        [Menu("Use Waypoint-Based Navigation")]
+        public ToggleNode UseWaypointNavigation { get; set; } = new ToggleNode(true);
+        
+        [Menu("Pathfinding Timeout (ms)")]
+        public RangeNode<int> PathfindingTimeout { get; set; } = new RangeNode<int>(500, 100, 2000);
+        
+        [Menu("Min Distance for Pathfinding")]
+        public RangeNode<float> MinPathfindingDistance { get; set; } = new RangeNode<float>(50f, 20f, 200f);
+        
+        [Menu("Max Waypoints Per Path")]
+        public RangeNode<int> MaxWaypointsPerPath { get; set; } = new RangeNode<int>(10, 3, 20);
+        
+        [Menu("Prefer Bridge Routes")]
+        public ToggleNode PreferBridgeRoutes { get; set; } = new ToggleNode(true);
+        
+        [Menu("Show Path Lines")]
+        public ToggleNode ShowPathLines { get; set; } = new ToggleNode(true);
+        
+        [Menu("Show Waypoints")]
+        public ToggleNode ShowWaypoints { get; set; } = new ToggleNode(true);
+        
+        [Menu("Path Line Color")]
+        public ColorNode PathLineColor { get; set; } = new ColorNode(Color.Cyan);
+        
+        [Menu("Waypoint Color")]
+        public ColorNode WaypointColor { get; set; } = new ColorNode(Color.Yellow);
+    }
+
     public class RadarMovement : BaseSettingsPlugin<RadarMovementSettings>
     {
         // Task-based system
@@ -101,6 +138,11 @@ namespace RadarMovement
         
         // Terrain analysis system
         private LineOfSight lineOfSight = null;
+        
+        // Advanced pathfinding system
+        private AqueductPathfinder pathfinder = null;
+        private bool pathfinderInitialized = false;
+        private DateTime lastPathfindingUpdate = DateTime.MinValue;
         
         // Coroutine system
         private Coroutine mainProcessingCoroutine = null;
@@ -134,6 +176,10 @@ namespace RadarMovement
                 // Initialize LineOfSight system
                 lineOfSight = new LineOfSight(GameController);
                 
+                // Initialize pathfinding system
+                pathfinder = new AqueductPathfinder(GameController, lineOfSight);
+                InitializePathfinder();
+                
                 // Subscribe to EventBus events
                 var eventBus = EventBus.Instance;
                 eventBus.Subscribe<AreaChangeEvent>(OnAreaChange);
@@ -145,8 +191,8 @@ namespace RadarMovement
                 // Start main processing coroutine
                 StartMainProcessingCoroutine();
 
-                AddDebugMessage("RadarMovement initialized with EventBus integration, LineOfSight, and Coroutine processing");
-                LogMessage("RadarMovement v3.0 - Coroutine-based async processing system initialized");
+                AddDebugMessage("RadarMovement initialized with EventBus integration, LineOfSight, Pathfinding, and Coroutine processing");
+                LogMessage("RadarMovement v4.0 - Advanced pathfinding system with A* navigation for Aqueducts initialized");
                 
                 return true;
             }
@@ -170,6 +216,9 @@ namespace RadarMovement
                 if (isTransitioning)
                 {
                     AddDebugMessage($"Expected area transition: {previousArea} -> {newArea}");
+                    
+                    // Reinitialize pathfinder for new area
+                    InitializePathfinder();
                     
                     // Start grace period coroutine to handle post-transition cleanup
                     StartAreaTransitionGracePeriod();
@@ -249,6 +298,107 @@ namespace RadarMovement
                 AddDebugMessage($"Render error: {ex.Message}");
             }
         }
+
+        #region Pathfinding System
+
+        private void InitializePathfinder()
+        {
+            try
+            {
+                if (pathfinder != null && pathfinder.InitializeTerrain())
+                {
+                    pathfinderInitialized = true;
+                    lastPathfindingUpdate = DateTime.Now;
+                    AddDebugMessage("Pathfinder initialized with Aqueduct terrain data");
+                }
+                else
+                {
+                    pathfinderInitialized = false;
+                    AddDebugMessage("Pathfinder initialization failed - terrain data unavailable");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error initializing pathfinder: {ex.Message}");
+                pathfinderInitialized = false;
+            }
+        }
+
+        private bool ShouldUsePathfinding(Vector3 start, Vector3 target)
+        {
+            if (!Settings.Pathfinding.EnableAdvancedPathfinding.Value || !pathfinderInitialized)
+                return false;
+                
+            var distance = Vector3.Distance(start, target);
+            return distance >= Settings.Pathfinding.MinPathfindingDistance.Value;
+        }
+
+        private async Task<PathfindingResult> FindPathToTargetAsync(Vector3 target)
+        {
+            try
+            {
+                if (!pathfinderInitialized || GameController.Player == null)
+                    return new PathfindingResult { Success = false, FailureReason = "Pathfinder not ready" };
+
+                var playerPos = new Vector3(
+                    GameController.Player.Pos.X,
+                    GameController.Player.Pos.Y,
+                    GameController.Player.Pos.Z
+                );
+
+                var cancellationToken = new CancellationTokenSource(Settings.Pathfinding.PathfindingTimeout.Value).Token;
+                return await pathfinder.FindPathAsync(playerPos, target, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return new PathfindingResult { Success = false, FailureReason = $"Pathfinding error: {ex.Message}" };
+            }
+        }
+
+        private void AddPathfindingTasks(PathfindingResult pathResult)
+        {
+            if (!pathResult.Success || pathResult.WorldPath.Count == 0)
+                return;
+
+            try
+            {
+                // Add movement tasks for each waypoint in the path
+                var waypointsToAdd = Math.Min(pathResult.WorldPath.Count, Settings.Pathfinding.MaxWaypointsPerPath.Value);
+                
+                for (int i = 0; i < waypointsToAdd; i++)
+                {
+                    var waypoint = pathResult.WorldPath[i];
+                    var screenPos = Camera.WorldToScreen(waypoint);
+                    
+                    if (screenPos != Vector2.Zero)
+                    {
+                        var taskType = (i == waypointsToAdd - 1) ? RadarTaskType.ClickTarget : RadarTaskType.ClickWaypoint;
+                        var priority = 10 - i; // Earlier waypoints get higher priority
+                        
+                        var task = new RadarTask(
+                            worldPosition: waypoint,
+                            screenPosition: screenPos,
+                            type: taskType,
+                            priority: priority
+                        )
+                        {
+                            Description = $"Pathfinding waypoint {i + 1}/{waypointsToAdd}",
+                            IsPathfindingWaypoint = true
+                        };
+                        
+                        taskQueue.Enqueue(task);
+                    }
+                }
+                
+                AddDebugMessage($"Added {waypointsToAdd} pathfinding waypoints to task queue");
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error adding pathfinding tasks: {ex.Message}");
+            }
+        }
+
+        #endregion
 
         #region Coroutine System
 
@@ -508,10 +658,37 @@ namespace RadarMovement
 
                 // Check terrain accessibility (critical for Aqueduct navigation)
                 var targetPos = new Vector2(entity.GridPos.X, entity.GridPos.Y);
+                var targetWorld = new Vector3(entity.GridPos.X, entity.GridPos.Y, entity.GridPos.Z);
                 var pathStatus = lineOfSight?.CheckPath(playerPos2D, targetPos) ?? PathStatus.Clear;
                 
-                if (pathStatus == PathStatus.Blocked)
+                // Advanced pathfinding for blocked or complex routes
+                if (pathStatus == PathStatus.Blocked && pathfinderInitialized && 
+                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, playerPos.Z), targetWorld))
                 {
+                    // Try pathfinding for blocked targets
+                    var pathResult = FindPathToTargetAsync(targetWorld).Result;
+                    
+                    if (pathResult.Success && pathResult.WorldPath.Count > 0)
+                    {
+                        // Target is reachable via pathfinding - add pathfinding tasks
+                        AddPathfindingTasks(pathResult);
+                        AddDebugMessage($"Added pathfinding route to {taskType}: {pathResult.WorldPath.Count} waypoints");
+                        continue; // Don't add the direct task since we're using pathfinding
+                    }
+                    else
+                    {
+                        // Even pathfinding failed - filter this target
+                        targetsFilteredByTerrain++;
+                        if (Settings.Debug.DetailedLogs.Value)
+                        {
+                            AddDebugMessage($"Filtered unreachable target: {taskType} - {pathResult.FailureReason}");
+                        }
+                        continue;
+                    }
+                }
+                else if (pathStatus == PathStatus.Blocked)
+                {
+                    // No pathfinding available, filter blocked targets
                     targetsFilteredByTerrain++;
                     if (Settings.Debug.DetailedLogs.Value)
                     {
@@ -520,10 +697,24 @@ namespace RadarMovement
                     continue;
                 }
 
-                // For dashable obstacles, we can still reach them but with lower priority
+                // For accessible targets or when pathfinding is disabled
                 var priorityModifier = pathStatus == PathStatus.Dashable ? -10 : 0;
 
-                // Create new task
+                // Check if we should use pathfinding even for clear paths (long distance optimization)
+                if (pathStatus == PathStatus.Clear && pathfinderInitialized && 
+                    ShouldUsePathfinding(new Vector3(playerPos.X, playerPos.Y, playerPos.Z), targetWorld) &&
+                    Settings.Pathfinding.UseWaypointNavigation.Value)
+                {
+                    var pathResult = FindPathToTargetAsync(targetWorld).Result;
+                    if (pathResult.Success && pathResult.WorldPath.Count > 1) // Only use if it provides a better route
+                    {
+                        AddPathfindingTasks(pathResult);
+                        AddDebugMessage($"Added optimized pathfinding route to {taskType}: {pathResult.WorldPath.Count} waypoints");
+                        continue;
+                    }
+                }
+
+                // Create standard direct movement task
                 var task = new RadarTask(entity, taskType.Value, Settings.Movement.CompletionDistance.Value);
                 task.Priority += priorityModifier; // Reduce priority for dashable targets
                 
@@ -930,6 +1121,17 @@ namespace RadarMovement
                 {
                     DrawTerrainAnalysis();
                 }
+
+                // Pathfinding visualization
+                if (Settings.Pathfinding.ShowPathLines.Value && pathfinderInitialized)
+                {
+                    DrawPathfindingVisualization();
+                }
+
+                if (Settings.Pathfinding.ShowWaypoints.Value && pathfinderInitialized)
+                {
+                    DrawWaypoints();
+                }
             }
             catch (Exception ex)
             {
@@ -1207,6 +1409,142 @@ namespace RadarMovement
             };
         }
 
+        private void DrawPathfindingVisualization()
+        {
+            try
+            {
+                if (GameController.Player == null) return;
+
+                // Draw pathfinding routes for current pathfinding waypoint tasks
+                var pathfindingTasks = taskQueue.Where(t => t.IsPathfindingWaypoint).ToList();
+                if (pathfindingTasks.Count == 0) return;
+
+                var playerScreenPos = Camera.WorldToScreen(GameController.Player.Pos);
+                var pathColor = Settings.Pathfinding.PathLineColor.Value;
+
+                // Group pathfinding tasks by their path sequence
+                for (int i = 0; i < pathfindingTasks.Count - 1; i++)
+                {
+                    var currentTask = pathfindingTasks[i];
+                    var nextTask = pathfindingTasks[i + 1];
+
+                    var currentScreenPos = Camera.WorldToScreen(currentTask.WorldPosition);
+                    var nextScreenPos = Camera.WorldToScreen(nextTask.WorldPosition);
+
+                    if (currentScreenPos != Vector2.Zero && nextScreenPos != Vector2.Zero)
+                    {
+                        // Draw path segment with varying thickness based on priority
+                        var thickness = Math.Max(1, currentTask.Priority / 2);
+                        Graphics.DrawLine(currentScreenPos, nextScreenPos, thickness, pathColor);
+
+                        // Draw direction arrow
+                        DrawArrow(currentScreenPos, nextScreenPos, pathColor, 8f);
+
+                        // Draw waypoint numbers
+                        Graphics.DrawText($"{i + 1}", currentScreenPos + new Vector2(-5, -20), 
+                            pathColor, FontAlign.Center);
+                    }
+                }
+
+                // Draw line from player to first pathfinding waypoint
+                if (pathfindingTasks.Count > 0 && playerScreenPos != Vector2.Zero)
+                {
+                    var firstTaskPos = Camera.WorldToScreen(pathfindingTasks[0].WorldPosition);
+                    if (firstTaskPos != Vector2.Zero)
+                    {
+                        Graphics.DrawLine(playerScreenPos, firstTaskPos, 2, Color.White);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error drawing pathfinding visualization: {ex.Message}");
+            }
+        }
+
+        private void DrawWaypoints()
+        {
+            try
+            {
+                if (pathfinder == null) return;
+
+                var waypoints = pathfinder.GetWaypoints();
+                var waypointColor = Settings.Pathfinding.WaypointColor.Value;
+
+                foreach (var waypoint in waypoints)
+                {
+                    var screenPos = Camera.WorldToScreen(waypoint.WorldPosition);
+                    if (screenPos == Vector2.Zero) continue;
+
+                    // Draw waypoint circle with color based on type
+                    var color = GetWaypointColor(waypoint.Type);
+                    var radius = GetWaypointRadius(waypoint.Type);
+
+                    Graphics.DrawFrame(new RectangleF(screenPos.X - radius, screenPos.Y - radius, 
+                        radius * 2, radius * 2), color, 2);
+
+                    // Draw waypoint name
+                    if (!string.IsNullOrEmpty(waypoint.Name))
+                    {
+                        Graphics.DrawText(waypoint.Name, screenPos + new Vector2(0, -radius - 15), 
+                            color, FontAlign.Center);
+                    }
+
+                    // Draw connections to other waypoints
+                    foreach (var connected in waypoint.ConnectedWaypoints)
+                    {
+                        var connectedScreenPos = Camera.WorldToScreen(connected.WorldPosition);
+                        if (connectedScreenPos != Vector2.Zero)
+                        {
+                            Graphics.DrawLine(screenPos, connectedScreenPos, 1, 
+                                Color.Gray.ToArgb() | 0x80000000); // Semi-transparent
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"Error drawing waypoints: {ex.Message}");
+            }
+        }
+
+        private Color GetWaypointColor(TerrainType type)
+        {
+            return type switch
+            {
+                TerrainType.Bridge => Color.Orange,
+                TerrainType.Exit => Color.Red,
+                TerrainType.Waypoint => Color.Yellow,
+                TerrainType.Normal => Color.Green,
+                TerrainType.Hazard => Color.Purple,
+                _ => Color.Gray
+            };
+        }
+
+        private float GetWaypointRadius(TerrainType type)
+        {
+            return type switch
+            {
+                TerrainType.Exit => 12f,
+                TerrainType.Bridge => 8f,
+                TerrainType.Waypoint => 6f,
+                _ => 4f
+            };
+        }
+
+        private void DrawArrow(Vector2 from, Vector2 to, Color color, float size)
+        {
+            var direction = Vector2.Normalize(to - from);
+            var perpendicular = new Vector2(-direction.Y, direction.X);
+            
+            var arrowTip = to - direction * size;
+            var arrowLeft = arrowTip - direction * size * 0.5f + perpendicular * size * 0.3f;
+            var arrowRight = arrowTip - direction * size * 0.5f - perpendicular * size * 0.3f;
+            
+            Graphics.DrawLine(arrowTip, arrowLeft, 2, color);
+            Graphics.DrawLine(arrowTip, arrowRight, 2, color);
+        }
+
         #endregion
 
         private bool IsValidScreenPosition(Vector2 screenPos)
@@ -1234,6 +1572,11 @@ namespace RadarMovement
                 // Clean up LineOfSight system
                 lineOfSight?.ClearDebugData();
                 lineOfSight = null;
+                
+                // Clean up pathfinder system
+                pathfinder?.ClearCache();
+                pathfinder = null;
+                pathfinderInitialized = false;
                 
                 // Unsubscribe from events to prevent memory leaks
                 EventBus.Instance?.Clear();

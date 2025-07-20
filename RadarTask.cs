@@ -76,6 +76,11 @@ namespace RadarMovement
         /// </summary>
         public bool IsFailed { get; set; }
 
+        /// <summary>
+        /// Whether this task is a pathfinding waypoint (part of an A* path)
+        /// </summary>
+        public bool IsPathfindingWaypoint { get; set; } = false;
+
         public RadarTask(Vector2 position, RadarTaskType type, float completionDistance = 30f)
         {
             WorldPosition = position;
