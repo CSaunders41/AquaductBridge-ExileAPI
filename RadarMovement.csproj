@@ -12,10 +12,12 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
-  <!-- Only compile RadarMovement.cs, exclude all other .cs files -->
+  <!-- Only compile RadarMovement files, exclude other .cs files from parent directory -->
   <ItemGroup>
-    <Compile Remove="**/*.cs" />
+    <Compile Remove="../*.cs" />
     <Compile Include="RadarMovement.cs" />
+    <Compile Include="RadarTask.cs" />
+    <Compile Include="Utils/EventBus.cs" />
   </ItemGroup>
 
   <ItemGroup>
