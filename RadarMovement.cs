@@ -859,7 +859,7 @@ namespace RadarMovement
             var playerPos2D = new Vector2(playerPos.X, playerPos.Y);
 
             // Check if we're close enough to complete the task
-            if (currentTask.IsPlayerCloseEnough(playerPos2D))
+            if (currentTask.IsPlayerCloseEnough(new SharpDX.Vector2(playerPos2D.X, playerPos2D.Y)))
             {
                 PerformTaskAction(currentTask);
                 return;
@@ -928,7 +928,7 @@ namespace RadarMovement
         {
             try
             {
-                var targetWorldPos = task.WorldPosition;
+                var targetWorldPos = new Vector2(task.WorldPosition.X, task.WorldPosition.Y);
                 
                 // Check if we need to find an alternate route
                 var pathStatus = lineOfSight?.CheckPath(playerPos, targetWorldPos) ?? PathStatus.Clear;
@@ -967,7 +967,7 @@ namespace RadarMovement
                     lastPositionUpdate = DateTime.Now;
 
                     var statusInfo = pathStatus != PathStatus.Clear ? $" ({pathStatus})" : "";
-                    AddDebugMessage($"Moving towards: {task.Type} at distance {task.GetDistanceFrom(playerPos):F1}{statusInfo}");
+                    AddDebugMessage($"Moving towards: {task.Type} at distance {task.GetDistanceFrom(new SharpDX.Vector2(playerPos.X, playerPos.Y)):F1}{statusInfo}");
                 }
             }
             catch (Exception ex)
@@ -1470,7 +1470,7 @@ namespace RadarMovement
                     var firstTaskPos = GameController.IngameState.Camera.WorldToScreen(new Vector3(pathfindingTasks[0].WorldPosition.X, pathfindingTasks[0].WorldPosition.Y, 0));
                     if (firstTaskPos.X != 0 && firstTaskPos.Y != 0)
                     {
-                        Graphics.DrawLine(playerScreenPos, firstTaskPos, 2, Color.White);
+                        Graphics.DrawLine(new SharpDX.Vector2(playerScreenPos.X, playerScreenPos.Y), new SharpDX.Vector2(firstTaskPos.X, firstTaskPos.Y), 2, Color.White);
                     }
                 }
             }
