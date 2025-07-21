@@ -546,6 +546,8 @@ namespace RadarMovement.Utils
                 default:
                     return PathStatus.Clear;          // Walkable
             }
+        }
+
         private int GetTerrainValue(Vector2 position)
         {
             var x = (int)Math.Round(position.X);
