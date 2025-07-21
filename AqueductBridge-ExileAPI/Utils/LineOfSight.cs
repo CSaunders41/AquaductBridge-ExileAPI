@@ -185,14 +185,19 @@ namespace RadarMovement.Utils
                 var walkable = IsWalkable(position);
                 var dashableWalkable = IsWalkable(position, true);
                 
-                var terrainType = terrainValue switch
+                string terrainType;
+                switch (terrainValue)
                 {
-                    0 => "Blocked",
-                    2 => "Dashable",
-                    _ when terrainValue > 0 => "Walkable",
-                    _ => "Unknown"
-                };
-                
+                    case 0:
+                        terrainType = "Blocked";
+                        break;
+                    case 2:
+                        terrainType = "Dashable";
+                        break;
+                    default:
+                        terrainType = terrainValue > 0 ? "Walkable" : "Unknown";
+                        break;
+                }                
                 return $"Terrain: {terrainValue} ({terrainType}), Walkable: {walkable}, Dashable: {dashableWalkable}";
             }
             catch (Exception ex)
@@ -259,8 +264,8 @@ namespace RadarMovement.Utils
                             case 2:
                                 dashableTiles++;
                                 break;
-                            default when terrainValue > 0:
-                                walkableTiles++;
+                            default:
+                                if (terrainValue > 0) walkableTiles++;
                                 
                                 // Check for bridge patterns (walkable surrounded by water/blocked)
                                 var blockedNeighbors = CountBlockedNeighbors(x, y);
@@ -326,14 +331,22 @@ namespace RadarMovement.Utils
                     var startScreen = camera.WorldToScreen(new SharpDX.Vector3(ray.Start.X, ray.Start.Y, 0));
                     var endScreen = camera.WorldToScreen(new SharpDX.Vector3(ray.End.X, ray.End.Y, 0));
                     
-                    var color = ray.Status switch
+                    Color color;
+                    switch (ray.Status)
                     {
-                        PathStatus.Clear => Color.Green,
-                        PathStatus.Dashable => Color.Yellow,
-                        PathStatus.Blocked => Color.Red,
-                        _ => Color.Gray
-                    };
-
+                        case PathStatus.Clear:
+                            color = Color.Green;
+                            break;
+                        case PathStatus.Dashable:
+                            color = Color.Yellow;
+                            break;
+                        case PathStatus.Blocked:
+                            color = Color.Red;
+                            break;
+                        default:
+                            color = Color.Gray;
+                            break;
+                    }
                     graphics.DrawLine(
                         new Vector2(startScreen.X + windowOffset.X, startScreen.Y + windowOffset.Y),
                         new Vector2(endScreen.X + windowOffset.X, endScreen.Y + windowOffset.Y),
@@ -524,14 +537,15 @@ namespace RadarMovement.Utils
 
             var terrainValue = _terrainData[y][x];
             
-            return terrainValue switch
+            switch (terrainValue)
             {
-                0 => PathStatus.Blocked,        // Impassable
-                2 => PathStatus.Dashable,       // Dashable obstacles
-                _ => PathStatus.Clear           // Walkable
-            };
-        }
-
+                case 0:
+                    return PathStatus.Blocked;        // Impassable
+                case 2:
+                    return PathStatus.Dashable;       // Dashable obstacles
+                default:
+                    return PathStatus.Clear;          // Walkable
+            }
         private int GetTerrainValue(Vector2 position)
         {
             var x = (int)Math.Round(position.X);
