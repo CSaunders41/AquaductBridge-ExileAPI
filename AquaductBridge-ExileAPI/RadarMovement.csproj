@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyTitle>RadarMovement</AssemblyTitle>
+    <AssemblyDescription>Simple movement plugin using Radar methodology</AssemblyDescription>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <!-- Only compile RadarMovement files, exclude duplicates and deployment directories -->
+  <ItemGroup>
+    <Compile Remove="../*.cs" />
+    <Compile Remove="AqueductBridge_Deploy_**/*" />
+    <Compile Remove="AqueductBridgePlugin.cs" />
+    <Compile Remove="AqueductBridgeSettings.cs" />
+    <Compile Include="RadarMovement.cs" />
+    <Compile Include="RadarTask.cs" />
+    <Compile Include="Utils/EventBus.cs" />
+    <Compile Include="Utils/LineOfSight.cs" />
+    <Compile Include="Utils/AqueductPathfinder.cs" />
+    <Compile Include="Utils/AdvancedMouse.cs" />
+    <Compile Include="Utils/BinaryHeap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ExileCore">
+      <HintPath>..\..\..\..\ExileCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX">
+      <HintPath>..\..\..\..\SharpDX.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SharpDX.Mathematics">
+      <HintPath>..\..\..\..\SharpDX.Mathematics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\..\..\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ImGui.NET">
+      <HintPath>..\..\..\..\ImGui.NET.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project> 
