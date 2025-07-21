@@ -11,6 +11,17 @@
     <!--Don't bother setting anything to do with the output path, HUD will do it for you if you put the source code inside Plugins/Source-->
   </PropertyGroup>
 
+  <!-- Explicitly include only AqueductBridge source files, exclude duplicates and deployment directories -->
+  <ItemGroup>
+    <Compile Remove="**/*" />
+    <Compile Include="AqueductBridgePlugin.cs" />
+    <Compile Include="AqueductBridgeSettings.cs" />
+    <None Include="AqueductBridge_Deploy_**/*" />
+    <None Include="RadarMovement.cs" />
+    <None Include="RadarTask.cs" />
+    <None Include="Utils/**/*" />
+  </ItemGroup>
+
   <ItemGroup>
     <!--Rather than replacing this with absolute or relative paths, you should create an environment variable for wherever your HUD folder is-->
     <Reference Include="ExileCore">
