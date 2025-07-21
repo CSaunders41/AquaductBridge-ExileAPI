@@ -319,7 +319,8 @@ namespace RadarMovement.Utils
                 var camera = _gameController.Game.IngameState.Camera;
                 var windowOffset = _gameController.Window.GetWindowRectangle().TopLeft;
 
-                foreach (var ray in _debugRays.TakeLast(20)) // Only show recent rays
+                var recentRays = _debugRays.Count > 20 ? _debugRays.Skip(_debugRays.Count - 20) : _debugRays;
+                foreach (var ray in recentRays) // Only show recent rays
                 {
                     var startScreen = camera.WorldToScreen(new SharpDX.Vector3(ray.Start.X, ray.Start.Y, 0));
                     var endScreen = camera.WorldToScreen(new SharpDX.Vector3(ray.End.X, ray.End.Y, 0));
